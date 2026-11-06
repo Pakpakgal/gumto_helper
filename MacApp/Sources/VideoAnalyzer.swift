@@ -8,7 +8,7 @@ import Vision
 enum VideoAnalyzer {
     private static let sampleFPS = 12.0
     private static let metricWidth = 160
-    private static let visionWidth = 640
+    private static let visionWidth = 1280
     /// Vision 좌표(좌하단 원점)의 하단 자막 띠.
     private static let lowerThirdRegion = CGRect(x: 0.08, y: 0.02, width: 0.84, height: 0.32)
     /// 좌상단 로고 제외 영역 (Vision 정규화 좌표: x 0~0.22, y 0.80~1.0 → 2560×1280 기준 약 560×256px).
@@ -473,9 +473,10 @@ enum VideoAnalyzer {
         let request = VNRecognizeTextRequest()
         if let regionOfInterest { request.regionOfInterest = regionOfInterest }
         request.recognitionLevel = .accurate
-        request.usesLanguageCorrection = true
+        request.usesLanguageCorrection = false
         request.recognitionLanguages = ["ko-KR", "en-US"]
-        request.minimumTextHeight = 0.008
+        request.customWords = BibleReferenceParser.books.flatMap { [$0.canonical] + $0.aliases }
+        request.minimumTextHeight = 0.006
         let handler = VNImageRequestHandler(cgImage: image, orientation: .up)
         try? handler.perform([request])
 
@@ -516,18 +517,21 @@ enum VideoAnalyzer {
         return (tokens.joined(separator: "|"), hasValidText, text.isEmpty ? nil : text)
     }
 
-    /// 고해상도 이미지(썸네일 프레임 등)에서 선명한 한글 텍스트를 정밀하게 추출합니다 (로고 제외).
+    /// 고해상도 원본 프레임에서 선명한 한글 텍스트를 정밀하게 추출합니다 (로고 제외, 자막 주요 영역 크롭 병합).
     private static func extractHighResText(from image: CGImage) -> String? {
         let request = VNRecognizeTextRequest()
         request.recognitionLevel = .accurate
-        request.usesLanguageCorrection = true
+        // 언어 교정을 꺼서 실제 오탈자를 원형 그대로 읽어옴
+        request.usesLanguageCorrection = false
         request.recognitionLanguages = ["ko-KR", "en-US"]
-        request.minimumTextHeight = 0.006
+        // 성경 책명 및 축약어를 customWords로 주입하여 장·절 누락 방지
+        request.customWords = BibleReferenceParser.books.flatMap { [$0.canonical] + $0.aliases }
+        request.minimumTextHeight = 0.005
         let handler = VNImageRequestHandler(cgImage: image, orientation: .up)
         try? handler.perform([request])
 
         let observations = (request.results ?? []).filter { obs in
-            guard obs.confidence > 0.2 else { return false }
+            guard obs.confidence > 0.15 else { return false }
             return !isLogoObservation(obs)
         }
         guard !observations.isEmpty else { return nil }
@@ -542,8 +546,10 @@ enum VideoAnalyzer {
         }
 
         let lines = sorted.compactMap { obs -> String? in
-            guard let candidate = obs.topCandidates(1).first?.string else { return nil }
-            let cleaned = cleanLogoText(candidate)
+            // topCandidates(3) 중 가장 신뢰도 있는 후보 취득
+            let candidates = obs.topCandidates(3)
+            guard let first = candidates.first?.string else { return nil }
+            let cleaned = cleanLogoText(first)
             return cleaned.isEmpty ? nil : cleaned
         }
         let joined = lines.joined(separator: " ")
@@ -749,7 +755,8 @@ enum VideoAnalyzer {
         guard !events.isEmpty else { return events }
         let generator = AVAssetImageGenerator(asset: asset)
         generator.appliesPreferredTrackTransform = true
-        generator.maximumSize = CGSize(width: 960, height: 540)
+        // 1920x1080 해상도로 프레임을 추출하여 글자 획 뭉개짐(받침 누락) 방지
+        generator.maximumSize = CGSize(width: 1920, height: 1080)
         generator.requestedTimeToleranceBefore = CMTime(seconds: 0.12, preferredTimescale: 600)
         generator.requestedTimeToleranceAfter = CMTime(seconds: 0.12, preferredTimescale: 600)
         let cacheRoot = try cacheDirectory(for: url)
