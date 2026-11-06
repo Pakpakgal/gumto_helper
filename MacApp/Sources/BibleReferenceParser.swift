@@ -76,9 +76,9 @@ enum BibleReferenceParser {
         Book(canonical: "요한계시록", osis: "REV", aliases: ["요한계시록", "계시록", "계"])
     ]
 
-    /// Vision customWords용 성경 66권 전체 이름 및 약어 캐시.
+    /// Vision customWords용 성경 66권 전체 이름·약어 및 부분 절 표기 캐시.
     static let allCustomWords: [String] = {
-        books.flatMap { [$0.canonical] + $0.aliases }
+        books.flatMap { [$0.canonical] + $0.aliases } + ["상반절", "하반절", "중반절"]
     }()
 
     /// 모든 alias를 canonical → short alias로 역매핑.

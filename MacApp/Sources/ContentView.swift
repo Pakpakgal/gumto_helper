@@ -261,7 +261,7 @@ struct ContentView: View {
             HStack(spacing: 7) {
                 Text("재생 속도").uiFont(.caption).foregroundStyle(.secondary)
                 speedButton("Q / ↓", label: "감속", action: model.slower)
-                speedButton("W", label: wButtonLabel, action: model.normalSpeed)
+                speedButton("W /", label: "정속, 이전 배속상태", action: model.normalSpeed)
                 speedButton("E / ↑", label: "가속", action: model.faster)
                 Text(String(format: "%.2f×", model.playbackRate))
                     .uiFont(.caption.monospacedDigit().weight(.semibold))
@@ -271,15 +271,6 @@ struct ContentView: View {
                     .uiFont(.caption2).foregroundStyle(.secondary)
             }
         }.padding(.horizontal, 14).padding(.vertical, 10)
-    }
-
-    private var wButtonLabel: String {
-        if abs(model.playbackRate - 1.0) <= 0.001,
-           let prev = model.previousPlaybackRate,
-           abs(prev - 1.0) > 0.001 {
-            return String(format: "이전(%.2g×)", prev)
-        }
-        return "정속"
     }
 
     private func speedButton(_ key: String, label: String, action: @escaping () -> Void) -> some View {
