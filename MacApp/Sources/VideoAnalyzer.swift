@@ -165,6 +165,7 @@ enum VideoAnalyzer {
         var lastReported = -1
         var consecutiveSimilar = 0
         var lastOCRIndex = -999
+        var fullPendingSince: Int?
 
         // 1단계: Zero-Copy CVPixelBuffer 직접 샘플링으로 초고속 컷/디졸브/스캔라인 변화 수집
         while let buffer = output.copyNextSampleBuffer() {
@@ -187,6 +188,7 @@ enum VideoAnalyzer {
                 difference: difference,
                 histogramDifference: histogramDifference,
                 consecutiveSimilar: &consecutiveSimilar,
+                fullPendingSince: &fullPendingSince,
                 lastOCRIndex: &lastOCRIndex,
                 sampleIndex: sampleIndex
             )
@@ -501,11 +503,12 @@ enum VideoAnalyzer {
         }
     }
 
-    /// 화면 변화가 감지되거나 주기적 타이밍에 OCR을 실행한다.
+    /// 화면 변화가 감지된 후 디졸브/전환이 안정된 시점(2프레임 연속 안정) 또는 주기적 타이밍에 OCR을 실행한다.
     private static func shouldRunOCR(
         difference: Double,
         histogramDifference: Double,
         consecutiveSimilar: inout Int,
+        fullPendingSince: inout Int?,
         lastOCRIndex: inout Int,
         sampleIndex: Int
     ) -> Bool {
@@ -514,20 +517,27 @@ enum VideoAnalyzer {
             consecutiveSimilar += 1
         } else {
             consecutiveSimilar = 0
+            if fullPendingSince == nil {
+                fullPendingSince = sampleIndex
+            }
         }
 
         let framesSinceLastOCR = sampleIndex - lastOCRIndex
         guard framesSinceLastOCR >= 6 else { return false } // 최소 0.5초 간격 유지
 
-        // 1) 화면에 유의미한 변화가 감지되었을 때 즉시 OCR
-        if !isSimilar && framesSinceLastOCR >= 12 {
-            lastOCRIndex = sampleIndex
-            return true
+        // 1) 화면 변화(등장/퇴장 디졸브 또는 컷)가 발생한 뒤 화면이 2프레임 이상 안정되었거나 최대 대기(16프레임)에 도달했을 때 OCR 실행
+        if let pending = fullPendingSince {
+            if (isSimilar && consecutiveSimilar >= 2) || (sampleIndex - pending >= 16) {
+                fullPendingSince = nil
+                lastOCRIndex = sampleIndex
+                return true
+            }
         }
 
         // 2) 주기적 OCR (변화가 없더라도 10초, 연속 유사 15초)
         let interval = (consecutiveSimilar >= 240) ? 180 : 120
         if framesSinceLastOCR >= interval {
+            fullPendingSince = nil
             lastOCRIndex = sampleIndex
             return true
         }

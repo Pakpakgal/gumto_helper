@@ -302,8 +302,67 @@ final class AnalysisLogger: ObservableObject {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         if let loaded = try? decoder.decode([AnalysisLogEntry].self, from: data) {
-            entries = loaded
+            entries = loaded.map { Self.refreshEntry($0) }
+            persistEntries()
         }
+    }
+
+    /// 이전 버전에서 기록된 로그 항목도 최신 다중 절(22, 23절 / 11, 12절)·상반절·기도문 검증 로직으로 자동 갱신합니다.
+    private static func refreshEntry(_ entry: AnalysisLogEntry) -> AnalysisLogEntry {
+        guard entry.eventKind == .subtitle, let text = entry.recognizedText, !text.isEmpty else {
+            return entry
+        }
+        if entry.isPrayer {
+            let tips = KoreanGrammarChecker.check(text).map { "[기도문 맞춤법/띄어쓰기] \($0)" }
+            return AnalysisLogEntry(
+                id: entry.id,
+                timestamp: entry.timestamp,
+                videoName: entry.videoName,
+                videoDuration: entry.videoDuration,
+                eventKind: entry.eventKind,
+                label: entry.label,
+                time: entry.time,
+                endTime: entry.endTime,
+                confidence: entry.confidence,
+                recognizedText: entry.recognizedText,
+                isPrayer: true,
+                bibleReferences: [],
+                matchStatuses: [],
+                accuracy: nil,
+                scriptureTexts: [],
+                comparedSubtitleTexts: [],
+                detectedIssues: tips,
+                isFlaggedFalsePositive: entry.isFlaggedFalsePositive,
+                userNote: entry.userNote
+            )
+        }
+        if entry.label.contains("본문 안내") {
+            return entry
+        }
+        let parsed = BibleReferenceParser.parse(text)
+        guard !parsed.isEmpty else { return entry }
+        let result = BibleVerseChecker.analyze(recognizedText: text, references: parsed)
+        let refNames = result.references.map(\.displayName)
+        let updatedEvent = ReviewEvent(
+            kind: .subtitle,
+            label: "말씀 자막 (\(refNames.joined(separator: ", ")))",
+            time: entry.time,
+            endTime: entry.endTime,
+            confidence: entry.confidence,
+            recognizedText: text,
+            bibleReferences: result.references,
+            bibleComparisons: result.comparisons,
+            isPrayer: false,
+            grammarSuggestions: []
+        )
+        return makeEntry(
+            from: updatedEvent,
+            videoName: entry.videoName,
+            videoDuration: entry.videoDuration,
+            timestamp: entry.timestamp,
+            isFlagged: entry.isFlaggedFalsePositive,
+            userNote: entry.userNote
+        )
     }
 
     private func persistEntries() {

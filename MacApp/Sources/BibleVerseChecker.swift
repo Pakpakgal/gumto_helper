@@ -72,21 +72,40 @@ enum BibleVerseChecker {
         return normalizeKorean(chunks.joined(separator: " "))
     }
 
-    /// 이전 버전에서 저장된 AnalysisReport의 말씀 자막 대조 결과를 최신 상반절/하반절 로직으로 즉시 갱신합니다.
+    /// 이전 버전에서 저장된 AnalysisReport의 말씀·기도문 자막 대조 결과를 최신 다중 절(22, 23절) 및 상반절/하반절 로직으로 즉시 갱신합니다.
     static func refreshReport(_ report: AnalysisReport) -> AnalysisReport {
         let updatedEvents = report.events.map { event -> ReviewEvent in
             guard event.kind == .subtitle,
-                  !event.isPrayer,
-                  let text = event.recognizedText,
-                  !event.bibleReferences.isEmpty else {
+                  let text = event.recognizedText else {
                 return event
+            }
+            if event.isPrayer {
+                let refreshedSuggestions = KoreanGrammarChecker.check(text)
+                return ReviewEvent(
+                    kind: event.kind,
+                    label: event.label,
+                    time: event.time,
+                    endTime: event.endTime,
+                    confidence: event.confidence,
+                    thumbnailPath: event.thumbnailPath,
+                    recognizedText: event.recognizedText,
+                    bibleReferences: event.bibleReferences,
+                    bibleComparisons: event.bibleComparisons,
+                    isPrayer: true,
+                    grammarSuggestions: refreshedSuggestions
+                )
             }
             let isIntro = event.bibleComparisons.allSatisfy { $0.status == .referenceOnly } && event.label.contains("본문 안내")
             guard !isIntro else { return event }
-            let result = analyze(recognizedText: text, references: event.bibleReferences)
+            let reParsedRefs = BibleReferenceParser.parse(text)
+            let targetRefs = reParsedRefs.isEmpty ? event.bibleReferences : reParsedRefs
+            guard !targetRefs.isEmpty else { return event }
+            let result = analyze(recognizedText: text, references: targetRefs)
+            let refNames = result.references.map(\.displayName).joined(separator: ", ")
+            let updatedLabel = refNames.isEmpty ? event.label : "말씀 자막 (\(refNames))"
             return ReviewEvent(
                 kind: event.kind,
-                label: event.label,
+                label: updatedLabel,
                 time: event.time,
                 endTime: event.endTime,
                 confidence: event.confidence,
@@ -368,9 +387,26 @@ enum BibleVerseChecker {
             )
         }
 
-        // 음절 단위 및 어절 단위 유사도 계산
-        let charAcc = characterAccuracy(normScripture, normSubtitle)
-        let errors = findErrors(scripture: cleanScripture, subtitle: cleanSubtitle, ignoreMissing: false)
+        // 화면 공간 부족으로 긴 절이나 다중 절을 두 화면으로 나누어 띄운 경우(분할 자막):
+        // 표시된 자막이 원문의 연속된 부분 문자열과 100% 일치하면 오타·누락 없는 정상 자막으로 판정합니다.
+        if normSubtitle.count >= 8 && normScripture.contains(normSubtitle) {
+            return BibleComparisonResult(
+                reference: reference,
+                scriptureText: cleanScripture,
+                subtitleText: cleanSubtitle,
+                accuracy: 1.0,
+                status: .exact,
+                errors: [],
+                summary: "성경 원문과 100% 일치 (화면 분할 표시)"
+            )
+        }
+
+        // 음절 단위 및 어절 단위 유사도 계산 (화면 분할 자막일 수 있으므로 자막 길이 대비 일치율도 함께 고려)
+        let fullCharAcc = characterAccuracy(normScripture, normSubtitle)
+        let spanCharAcc = Double(charLCSLength(normScripture, normSubtitle)) / Double(max(1, normSubtitle.count))
+        let isLikelySplitSubtitle = normSubtitle.count >= 8 && normSubtitle.count < Int(Double(normScripture.count) * 0.78) && spanCharAcc >= 0.80
+        let charAcc = isLikelySplitSubtitle ? spanCharAcc : fullCharAcc
+        let errors = findErrors(scripture: cleanScripture, subtitle: cleanSubtitle, ignoreMissing: isLikelySplitSubtitle)
 
         let status: BibleMatchStatus
         let summary: String
@@ -430,13 +466,20 @@ enum BibleVerseChecker {
         return nil
     }
 
-    /// 자막에서 장·절 표기(예: "[창 1:1]", "마태복음 3:16", "(시편 23:1)")를 제거하고 본문만 추출
+    /// 자막에서 장·절 표기(예: "[창 1:1]", "창세기 25장 22, 23절", "로마서 9장 11, 12절")를 제거하고 본문만 추출
     private static func extractSubtitleBody(from rawText: String) -> String {
         var text = rawText
 
-        // [창 1:1], (요 3:16-17), 요 3:16, 창세기 1장 1절 등 패턴 매칭 제거
-        let refPattern = #"(?:\[|\(|\<)?\s*(?:[가-힣]{1,6})\s*\d{1,3}\s*(?:(?:장|편)\s*|[.:：]\s*)\d{1,3}(?:\s*(?:절)?\s*[-~–—]\s*\d{1,3})?\s*(?:절)?\s*(?:\]|\)|\>)?"#
+        // [창 1:1], (요 3:16-17), 창세기 25장 22, 23절, 로마서 9장 11, 12절 등 다중 절 포함 패턴 매칭 제거
+        let refPattern = #"(?:\[|\(|\<)?\s*(?:[가-힣]{1,6})\s*\d{1,3}\s*(?:(?:장|편)\s*|[.:：]\s*)\d{1,3}(?:\s*(?:절)?\s*(?:[-~–—,，·ㆍ]|및)\s*\d{1,3})*\s*(?:절)?\s*(?:\]|\)|\>)?"#
         if let regex = try? NSRegularExpression(pattern: refPattern) {
+            let range = NSRange(location: 0, length: (text as NSString).length)
+            text = regex.stringByReplacingMatches(in: text, range: range, withTemplate: " ")
+        }
+
+        // 혹시 앞쪽에 남아 있는 ", 23절", ", 12절" 등 잔여 절 표기 제거
+        let leftoverVerseHeader = #"^\s*(?:[,，·ㆍ~–—-]\s*\d{1,3}\s*(?:절)?\s*)+"#
+        if let regex = try? NSRegularExpression(pattern: leftoverVerseHeader) {
             let range = NSRange(location: 0, length: (text as NSString).length)
             text = regex.stringByReplacingMatches(in: text, range: range, withTemplate: " ")
         }

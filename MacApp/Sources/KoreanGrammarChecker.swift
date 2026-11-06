@@ -27,17 +27,25 @@ enum KoreanGrammarChecker {
         Rule(pattern: #"(기도합니다|하옵나이다)아멘"#, suggestion: "$1. 아멘", reason: "띄어쓰기")
     ]
 
-    /// 사전에 없어도 오타로 보지 않는 기도문·성경 용어.
+    /// 사전에 없어도 오타로 보지 않는 기도문·성경 용어 및 어간.
     private static let allowedWords: Set<String> = [
         "주옵소서", "하옵나이다", "하옵소서", "옵소서", "긍휼", "긍휼히", "간구", "간구하옵나니", "간구합니다",
         "은혜", "은총", "아멘", "성령", "성령님", "예수", "그리스도", "여호와", "하나님", "주님", "아버지",
-        "인도하옵소서", "베푸소서", "지키소서", "축복", "축복하옵소서", "찬양", "영광", "구원", "십자가", "말씀"
+        "인도하옵소서", "베푸소서", "지키소서", "축복", "축복하옵소서", "찬양", "영광", "구원", "십자가", "말씀",
+        "겸손케", "온전케", "거룩케", "회복케", "강건케", "충만케", "승리케", "축복함으로", "감사함으로", "순종함으로",
+        "주님만을", "하나님만을", "예수님만을", "주님만", "하나님만"
     ]
 
-    /// 고어체 어미가 붙은 단어는 검사하지 않는다.
+    /// 성경 인물·지명·기도 상용 어근 및 활용 어미 패턴 (NSSpellChecker 오탐 방지).
     private static let archaicEnding = try! NSRegularExpression(
-        pattern: #"(옵소서|옵나이다|나이다|사오니|사옵니다|사옵나이다|옵나니|시옵고|시옵소서|소서|오니|하옵|이옵|시옵)"#
+        pattern: #"(옵소서|옵나이다|나이다|사오니|사옵니다|사옵나이다|옵나니|시옵고|시옵소서|소서|오니|하옵|이옵|시옵|하사|케$|함으로$|하므로$|만을$|만이$|께서$|께$)"#
     )
+
+    private static let biblicalPrefixes: [String] = [
+        "아브라함", "이삭", "야곱", "리브가", "요셉", "모세", "아론", "여호수아", "갈렙", "다윗", "솔로몬",
+        "사무엘", "엘리야", "엘리사", "이사야", "예레미야", "에스겔", "다니엘", "베드로", "바울", "요한",
+        "이스라엘", "예루살렘", "갈릴리", "사마리아", "그리스도", "하나님", "예수님", "성령님", "주님", "여호와"
+    ]
 
     /// PRAY 자막은 검사에서 제외한다.
     private static let prayLabel = try! NSRegularExpression(pattern: #"\bPRAY(?:ER)?\b"#, options: .caseInsensitive)
@@ -90,10 +98,9 @@ enum KoreanGrammarChecker {
                     forWordRange: NSRange(location: 0, length: (word as NSString).length),
                     in: word, language: "ko", inSpellDocumentWithTag: 0
                 )?.first
+                // macOS 기본 한국어 사전은 활용형 어휘가 적어 대안 제시(guess)조차 없는 경우는 사전 미등재 정상 어휘일 확률이 높으므로 제외
                 if let guess, guess != word {
                     results.append("‘\(word)’ → ‘\(guess)’ · 오타 가능성")
-                } else {
-                    results.append("‘\(word)’ · 오타 가능성")
                 }
             }
             return results
@@ -104,6 +111,7 @@ enum KoreanGrammarChecker {
 
     private static func isCheckable(_ word: String) -> Bool {
         guard word.count >= 2, !allowedWords.contains(word) else { return false }
+        if biblicalPrefixes.contains(where: { word.hasPrefix($0) }) { return false }
         // 한글로만 이루어진 단어만 검사한다 (숫자·영문 제외).
         guard word.allSatisfy({ $0.unicodeScalars.allSatisfy { (0xAC00...0xD7A3).contains($0.value) } }) else { return false }
         let range = NSRange(word.startIndex..., in: word)

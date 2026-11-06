@@ -4,14 +4,14 @@
 
 ## 📥 최신 버전 다운로드
 
-[![최신 DMG 다운로드](https://img.shields.io/badge/Download-최신_DMG_다운로드_(v0.4.3)-blue?style=for-the-badge&logo=apple)](https://github.com/Pakpakgal/gumto_helper/releases/latest/download/MaeMook_v0.4.3.dmg)
+[![최신 DMG 다운로드](https://img.shields.io/badge/Download-최신_DMG_다운로드_(v0.5.0)-blue?style=for-the-badge&logo=apple)](https://github.com/Pakpakgal/gumto_helper/releases/latest/download/MaeMook_v0.5.0.dmg)
 
 - **최신 릴리스 바로가기**: [GitHub Releases](https://github.com/Pakpakgal/gumto_helper/releases/latest)
-- **DMG 직접 다운로드**: [MaeMook_v0.4.3.dmg 다운로드](https://github.com/Pakpakgal/gumto_helper/releases/latest/download/MaeMook_v0.4.3.dmg)
+- **DMG 직접 다운로드**: [MaeMook_v0.5.0.dmg 다운로드](https://github.com/Pakpakgal/gumto_helper/releases/latest/download/MaeMook_v0.5.0.dmg)
 
 ## 바로 사용하기
 
-1. 다운로드한 `MaeMook_v0.4.3.dmg`를 엽니다.
+1. 다운로드한 `MaeMook_v0.5.0.dmg`를 엽니다.
 2. `매묵 영상 검수 도우미.app`을 `Applications` 폴더로 드래그합니다.
 3. 처음 실행할 때 macOS 보안 알림이 뜨면 앱을 **Control-클릭**하고 **열기**를 선택합니다.
 4. 앱에서 **영상 추가**로 여러 영상을 선택하거나 드래그앤드롭합니다.

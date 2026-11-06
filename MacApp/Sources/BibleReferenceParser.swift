@@ -94,25 +94,35 @@ enum BibleReferenceParser {
 
     static func parse(_ text: String) -> [BibleReference] {
         var found: [BibleReference] = []
+        let numRegex = try? NSRegularExpression(pattern: #"\d{1,3}"#)
         for book in books {
             for alias in book.aliases.sorted(by: { $0.count > $1.count }) {
-                // OCR이 책 이름 사이에 공백을 삽입하는 경우(예: "요한 복음")도 허용한다.
+                // OCR이 책 이름 사이에 공백을 삽입하는 경우(예: "요한 복음")와
+                // 쉼표·점·물결 등으로 이어진 다중 절 표기(예: "22, 23절", "11, 12절", "10-11절")를 모두 허용한다.
                 let escaped = alias.map { NSRegularExpression.escapedPattern(for: String($0)) }
                     .joined(separator: "\\s*")
-                let pattern = "(?:^|[^가-힣])\(escaped)\\s*(\\d{1,3})\\s*(?:(?:장|편)\\s*|[.:：]\\s*)(\\d{1,3})(?:\\s*(?:절)?\\s*[-~–—]\\s*(\\d{1,3}))?\\s*(?:절)?"
+                let pattern = "(?:^|[^가-힣])\(escaped)\\s*(\\d{1,3})\\s*(?:(?:장|편)\\s*|[.:：]\\s*)(\\d{1,3}(?:\\s*(?:절)?\\s*(?:[-~–—,，·ㆍ]|및)\\s*\\d{1,3})*)\\s*(?:절)?"
                 guard let regex = try? NSRegularExpression(pattern: pattern) else { continue }
                 let range = NSRange(text.startIndex..., in: text)
                 for match in regex.matches(in: text, range: range) {
                     guard let chapterRange = Range(match.range(at: 1), in: text),
-                          let verseRange = Range(match.range(at: 2), in: text),
-                          let chapter = Int(text[chapterRange]),
-                          let verse = Int(text[verseRange]), chapter > 0, verse > 0 else { continue }
-                    var endVerse: Int?
-                    if match.range(at: 3).location != NSNotFound,
-                       let endRange = Range(match.range(at: 3), in: text) {
-                        if let parsed = Int(text[endRange]), parsed >= verse { endVerse = parsed }
-                    }
-                    found.append(BibleReference(book: book.canonical, osisCode: book.osis, chapter: chapter, verse: verse, endVerse: endVerse, accuracy: nil))
+                          let versesBlockRange = Range(match.range(at: 2), in: text),
+                          let chapter = Int(text[chapterRange]), chapter > 0 else { continue }
+                    let versesBlock = String(text[versesBlockRange])
+                    let blockNS = versesBlock as NSString
+                    let numbers = (numRegex?.matches(in: versesBlock, range: NSRange(location: 0, length: blockNS.length)) ?? [])
+                        .compactMap { Int(blockNS.substring(with: $0.range)) }
+                        .filter { $0 > 0 }
+                    guard let firstVerse = numbers.first else { continue }
+                    let lastVerse = numbers.dropFirst().last.flatMap { $0 >= firstVerse ? $0 : nil }
+                    found.append(BibleReference(
+                        book: book.canonical,
+                        osisCode: book.osis,
+                        chapter: chapter,
+                        verse: firstVerse,
+                        endVerse: lastVerse,
+                        accuracy: nil
+                    ))
                 }
             }
         }
