@@ -60,7 +60,6 @@ final class AppModel: ObservableObject {
             }
         }
         restoreSession()
-        UpdateChecker.shared.checkForUpdates(userInitiated: false)
     }
 
     private struct SavedItem: Codable {

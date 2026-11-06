@@ -77,6 +77,9 @@ struct ContentView: View {
         .sheet(isPresented: $updater.showSourceConfigSheet) {
             UpdateSourceSettingsSheet(checker: updater)
         }
+        .sheet(isPresented: $updater.showProgressModal) {
+            UpdateProgressSheet(checker: updater)
+        }
         .onDrop(of: [.fileURL], isTargeted: $isDropTarget) { providers in
             for provider in providers {
                 provider.loadDataRepresentation(forTypeIdentifier: UTType.fileURL.identifier) { data, _ in
@@ -87,6 +90,9 @@ struct ContentView: View {
             return !providers.isEmpty
         }
         .onOpenURL { url in model.addVideos([url]) }
+        .onAppear {
+            updater.checkForUpdates(userInitiated: false)
+        }
     }
 
     private func updateBanner(_ info: AppUpdateInfo) -> some View {
@@ -102,7 +108,7 @@ struct ContentView: View {
                 .lineLimit(1)
             Spacer()
             Button("자세히") {
-                updater.showUpdateAlert = true
+                updater.presentModalUpdateAlert(info)
             }
             .controlSize(.small)
             Button("다운로드") {
@@ -134,7 +140,7 @@ struct ContentView: View {
             Spacer()
             if let update = updater.availableUpdate {
                 Button {
-                    updater.showUpdateAlert = true
+                    updater.presentModalUpdateAlert(update)
                 } label: {
                     Label("업데이트 있음 (v\(update.latestVersion))", systemImage: "arrow.down.circle.fill")
                 }

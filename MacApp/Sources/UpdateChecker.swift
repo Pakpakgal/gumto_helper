@@ -1,6 +1,7 @@
 import AppKit
 import Foundation
 import SwiftUI
+@preconcurrency import UserNotifications
 
 struct AppUpdateInfo: Identifiable, Sendable {
     var id: String { latestVersion }
@@ -13,8 +14,16 @@ struct AppUpdateInfo: Identifiable, Sendable {
     let publishedAt: Date?
 }
 
+enum UpdateDownloadState: Equatable, Sendable {
+    case idle
+    case downloading(progress: Double)
+    case readyToInstall(dmgURL: URL)
+    case installing
+    case failed(String)
+}
+
 @MainActor
-final class UpdateChecker: ObservableObject {
+final class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
     static let shared = UpdateChecker()
 
     @Published var availableUpdate: AppUpdateInfo?
@@ -23,6 +32,15 @@ final class UpdateChecker: ObservableObject {
     @Published var showUpdateAlert = false
     @Published var checkErrorMessage: String?
     @Published var showSourceConfigSheet = false
+
+    @Published var downloadState: UpdateDownloadState = .idle
+    @Published var showProgressModal = false
+
+    private var downloadTask: URLSessionDownloadTask?
+    private lazy var urlSession: URLSession = {
+        let config = URLSessionConfiguration.default
+        return URLSession(configuration: config, delegate: self, delegateQueue: .main)
+    }()
 
     private static let repoOwnerKey = "com.hcc.MaeMook.update.githubOwner"
     private static let repoNameKey = "com.hcc.MaeMook.update.githubRepo"
@@ -74,7 +92,9 @@ final class UpdateChecker: ObservableObject {
         (Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String) ?? "1"
     }
 
-    private init() {}
+    private override init() {
+        super.init()
+    }
 
     func checkForUpdates(userInitiated: Bool) {
         guard !isChecking else { return }
@@ -89,6 +109,7 @@ final class UpdateChecker: ObservableObject {
                 if Self.isVersion(info.latestVersion, newerThan: currentVersion) {
                     self.availableUpdate = info
                     if userInitiated || skipped != info.latestVersion {
+                        self.postSystemNotification(info)
                         self.showUpdateAlert = true
                     }
                 } else {
@@ -112,8 +133,172 @@ final class UpdateChecker: ObservableObject {
         }
     }
 
+    func startInAppDownload(for info: AppUpdateInfo) {
+        showUpdateAlert = false
+        showProgressModal = true
+        downloadState = .downloading(progress: 0)
+
+        // 파일 프로토콜(file://)인 경우 바로 복사 처리
+        if info.downloadURL.isFileURL {
+            let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("MaeMookUpdate")
+            try? FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+            let dest = tempDir.appendingPathComponent("update.dmg")
+            try? FileManager.default.removeItem(at: dest)
+            do {
+                try FileManager.default.copyItem(at: info.downloadURL, to: dest)
+                self.downloadState = .readyToInstall(dmgURL: dest)
+            } catch {
+                self.downloadState = .failed(error.localizedDescription)
+            }
+            return
+        }
+
+        downloadTask?.cancel()
+        var request = URLRequest(url: info.downloadURL, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 120)
+        request.setValue("MaeMook/\(currentVersion)", forHTTPHeaderField: "User-Agent")
+        downloadTask = urlSession.downloadTask(with: request)
+        downloadTask?.resume()
+    }
+
+    func cancelDownload() {
+        downloadTask?.cancel()
+        downloadTask = nil
+        downloadState = .idle
+        showProgressModal = false
+    }
+
+    func installAndRelaunch(dmgURL: URL) {
+        downloadState = .installing
+        let currentAppURL = Bundle.main.bundleURL
+
+        DispatchQueue.global(qos: .userInitiated).async {
+            do {
+                let helperScript = try Self.prepareInstallationScript(dmgURL: dmgURL, currentAppURL: currentAppURL)
+                DispatchQueue.main.async {
+                    let task = Process()
+                    task.executableURL = URL(fileURLWithPath: "/bin/zsh")
+                    task.arguments = [helperScript.path]
+                    do {
+                        try task.run()
+                        exit(0)
+                    } catch {
+                        self.downloadState = .failed("설치 스크립트 실행 실패: \(error.localizedDescription)")
+                    }
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    self.downloadState = .failed(error.localizedDescription)
+                }
+            }
+        }
+    }
+
+    private static func prepareInstallationScript(dmgURL: URL, currentAppURL: URL) throws -> URL {
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("MaeMookInstaller-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        let scriptURL = tempDir.appendingPathComponent("install_and_restart.sh")
+
+        let currentPID = ProcessInfo.processInfo.processIdentifier
+        let appTargetDir = currentAppURL.deletingLastPathComponent().path
+        let appName = currentAppURL.lastPathComponent
+
+        // DMG 마운트 -> App 파일 추출 -> 대상 폴더에 덮어쓰기 -> quarantine 제거 -> 새 앱 실행
+        let scriptContent = """
+        #!/bin/zsh
+        set -e
+
+        # 1. 기존 프로세스 종료 대기
+        while kill -0 \(currentPID) 2>/dev/null; do
+            sleep 0.2
+        done
+        sleep 0.5
+
+        DMG_PATH="\(dmgURL.path)"
+        TARGET_APP="\(currentAppURL.path)"
+        TARGET_DIR="\(appTargetDir)"
+        APP_NAME="\(appName)"
+
+        # 2. DMG 마운트
+        MOUNT_OUTPUT=$(hdiutil attach -nobrowse -readonly "$DMG_PATH")
+        MOUNT_POINT=$(echo "$MOUNT_OUTPUT" | grep "/Volumes/" | awk -F'\t' '{print $NF}' | head -n 1)
+
+        if [ -z "$MOUNT_POINT" ] || [ ! -d "$MOUNT_POINT" ]; then
+            echo "Failed to mount DMG"
+            exit 1
+        fi
+
+        # 3. 마운트된 디스크 안에서 .app 찾기
+        NEW_APP=$(find "$MOUNT_POINT" -maxdepth 2 -name "*.app" | head -n 1)
+        if [ -z "$NEW_APP" ] || [ ! -d "$NEW_APP" ]; then
+            hdiutil detach "$MOUNT_POINT" 2>/dev/null || true
+            exit 1
+        fi
+
+        # 4. 대상 앱 교체
+        rm -rf "$TARGET_APP"
+        cp -R "$NEW_APP" "$TARGET_DIR/$APP_NAME"
+
+        # 5. 언마운트
+        hdiutil detach "$MOUNT_POINT" -force 2>/dev/null || true
+        rm -f "$DMG_PATH"
+
+        # 6. 보안 격리 속성(quarantine) 해제
+        xattr -dr com.apple.quarantine "$TARGET_DIR/$APP_NAME" 2>/dev/null || true
+
+        # 7. 새 앱 실행
+        open "$TARGET_DIR/$APP_NAME"
+
+        # 8. 임시 스크립트 폴더 삭제
+        rm -rf "\(tempDir.path)"
+        exit 0
+        """
+
+        try scriptContent.write(to: scriptURL, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: scriptURL.path)
+        return scriptURL
+    }
+
+    // MARK: - URLSessionDownloadDelegate
+
+    nonisolated func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didWriteData bytesWritten: Int64, totalBytesWritten: Int64, totalBytesExpectedToWrite: Int64) {
+        let progress = totalBytesExpectedToWrite > 0
+            ? Double(totalBytesWritten) / Double(totalBytesExpectedToWrite)
+            : 0.0
+        Task { @MainActor in
+            self.downloadState = .downloading(progress: progress)
+        }
+    }
+
+    nonisolated func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("MaeMookUpdate")
+        try? FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        let dest = tempDir.appendingPathComponent("update.dmg")
+        try? FileManager.default.removeItem(at: dest)
+
+        do {
+            try FileManager.default.moveItem(at: location, to: dest)
+            Task { @MainActor in
+                self.downloadState = .readyToInstall(dmgURL: dest)
+            }
+        } catch {
+            Task { @MainActor in
+                self.downloadState = .failed("다운로드 파일 저장 실패: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    nonisolated func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+        if let error {
+            Task { @MainActor in
+                if (error as NSError).code != NSURLErrorCancelled {
+                    self.downloadState = .failed(error.localizedDescription)
+                }
+            }
+        }
+    }
+
     func openDownload(_ info: AppUpdateInfo) {
-        NSWorkspace.shared.open(info.downloadURL)
+        startInAppDownload(for: info)
     }
 
     func openReleasePage(_ info: AppUpdateInfo) {
@@ -123,6 +308,28 @@ final class UpdateChecker: ObservableObject {
     func skipVersion(_ version: String) {
         UserDefaults.standard.set(version, forKey: Self.skippedVersionKey)
         showUpdateAlert = false
+    }
+
+    func postSystemNotification(_ info: AppUpdateInfo) {
+        let center = UNUserNotificationCenter.current()
+        center.requestAuthorization(options: [.alert, .sound, .badge]) { granted, _ in
+            guard granted else { return }
+            let content = UNMutableNotificationContent()
+            content.title = "업데이트 버전이 있습니다 (v\(info.latestVersion))"
+            content.subtitle = "현재 버전 v\(info.currentVersion) → 최신 버전 v\(info.latestVersion)"
+            content.body = info.releaseNotes
+            content.sound = .default
+            let request = UNNotificationRequest(
+                identifier: "com.hcc.MaeMook.update.\(info.latestVersion)",
+                content: content,
+                trigger: nil
+            )
+            UNUserNotificationCenter.current().add(request)
+        }
+    }
+
+    func presentModalUpdateAlert(_ info: AppUpdateInfo) {
+        showUpdateAlert = true
     }
 
     // MARK: - Networking & Parsing
@@ -268,6 +475,92 @@ final class UpdateChecker: ObservableObject {
     }
 }
 
+struct UpdateProgressSheet: View {
+    @ObservedObject var checker: UpdateChecker
+
+    var body: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "arrow.down.circle.fill")
+                .font(.system(size: 40))
+                .foregroundStyle(.blue)
+
+            if let info = checker.availableUpdate {
+                Text("영상 검수 도우미 v\(info.latestVersion)")
+                    .font(.headline)
+            }
+
+            switch checker.downloadState {
+            case .idle:
+                Text("다운로드 준비 중…")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            case .downloading(let progress):
+                VStack(spacing: 8) {
+                    ProgressView(value: progress)
+                        .progressViewStyle(.linear)
+                    HStack {
+                        Text("다운로드 중…")
+                        Spacer()
+                        Text("\(Int(progress * 100))%")
+                    }
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+                }
+                Button("취소", role: .cancel) {
+                    checker.cancelDownload()
+                }
+            case .readyToInstall(let dmgURL):
+                VStack(spacing: 6) {
+                    Text("다운로드 완료!")
+                        .font(.headline)
+                        .foregroundStyle(.green)
+                    Text("앱을 교체하고 자동으로 다시 시작합니다.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                HStack(spacing: 12) {
+                    Button("취소", role: .cancel) {
+                        checker.cancelDownload()
+                    }
+                    Button("설치 & 다시 실행하기") {
+                        checker.installAndRelaunch(dmgURL: dmgURL)
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
+            case .installing:
+                VStack(spacing: 10) {
+                    ProgressView()
+                    Text("설치 진행 및 재시작 중…")
+                        .font(.subheadline)
+                }
+            case .failed(let message):
+                VStack(spacing: 6) {
+                    Text("업데이트 처리 실패")
+                        .font(.headline)
+                        .foregroundStyle(.red)
+                    Text(message)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+                HStack {
+                    Button("닫기", role: .cancel) {
+                        checker.cancelDownload()
+                    }
+                    if let info = checker.availableUpdate {
+                        Button("수동 다운로드 (브라우저)") {
+                            NSWorkspace.shared.open(info.downloadURL)
+                            checker.cancelDownload()
+                        }
+                    }
+                }
+            }
+        }
+        .padding(24)
+        .frame(width: 380)
+    }
+}
+
 struct UpdateSourceSettingsSheet: View {
     @ObservedObject var checker: UpdateChecker
     @Environment(\.dismiss) private var dismiss
@@ -336,3 +629,4 @@ struct UpdateSourceSettingsSheet: View {
         }
     }
 }
+

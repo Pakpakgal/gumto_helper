@@ -26,7 +26,7 @@ xcrun actool "$ROOT_DIR/Assets.xcassets" \
   --output-partial-info-plist "$BUILD_DIR/asset-info.plist" >/dev/null
 
 SOURCES=("$ROOT_DIR"/Sources/*.swift)
-COMMON=(-swift-version 5 -parse-as-library -O -sdk "$SDK" -framework SwiftUI -framework AppKit -framework AVKit -framework AVFoundation -framework Vision -framework CoreImage -framework ImageIO -framework UniformTypeIdentifiers)
+COMMON=(-swift-version 5 -parse-as-library -O -sdk "$SDK" -framework SwiftUI -framework AppKit -framework AVKit -framework AVFoundation -framework Vision -framework CoreImage -framework ImageIO -framework UniformTypeIdentifiers -framework UserNotifications)
 
 swiftc "${COMMON[@]}" -target arm64-apple-macos13.0 "${SOURCES[@]}" -o "$BUILD_DIR/MaeMook-arm64"
 swiftc "${COMMON[@]}" -target x86_64-apple-macos13.0 "${SOURCES[@]}" -o "$BUILD_DIR/MaeMook-x86_64"
