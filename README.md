@@ -2,13 +2,22 @@
 
 로컬 MP4/MOV/M4V 파일에서 컷, 디졸브, 화면 자막 변화 후보를 찾는 네이티브 macOS 앱입니다.
 
+## 📥 최신 버전 다운로드
+
+[![최신 DMG 다운로드](https://img.shields.io/badge/Download-최신_DMG_다운로드_(v0.3.4)-blue?style=for-the-badge&logo=apple)](https://github.com/Pakpakgal/gumto_helper/releases/latest/download/MaeMook_v0.3.4.dmg)
+
+- **최신 릴리스 바로가기**: [GitHub Releases](https://github.com/Pakpakgal/gumto_helper/releases/latest)
+- **DMG 직접 다운로드**: [MaeMook_v0.3.4.dmg 다운로드](https://github.com/Pakpakgal/gumto_helper/releases/latest/download/MaeMook_v0.3.4.dmg)
+
 ## 바로 사용하기
 
-1. [`dist/영상 검수 도우미.dmg`](dist/영상%20검수%20도우미.dmg)를 엽니다.
-2. 앱을 Applications 폴더로 드래그합니다.
-3. 처음 실행할 때 macOS가 차단하면 앱을 Control-클릭하고 **열기**를 선택합니다.
+1. 다운로드한 `MaeMook_v0.3.4.dmg`를 엽니다.
+2. `영상 검수 도우미.app`을 `Applications` 폴더로 드래그합니다.
+3. 처음 실행할 때 macOS 보안 알림이 뜨면:
+   - 앱을 **Control-클릭**하고 **열기**를 선택하거나
+   - DMG 안에 포함된 **`설치 도우미.command`**를 더블클릭합니다.
 4. 앱에서 **영상 추가**로 여러 영상을 선택하거나 드래그앤드롭합니다.
-5. 영상은 추가한 순서대로 분석됩니다. **분석 상태** 창에서 진행률을 확인하고, 완료된 영상의 **검토**를 누릅니다.
+5. 영상은 추가한 순서대로 자동 분석되며, 새로운 업데이트가 배포되면 앱 실행 시 자동으로 감지하여 **인앱 원클릭 업데이트**를 지원합니다.
 
 ## 기능
 
