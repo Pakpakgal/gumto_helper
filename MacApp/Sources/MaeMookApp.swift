@@ -8,7 +8,7 @@ struct MaeMookApp: App {
     @Environment(\.openWindow) private var openWindow
 
     var body: some Scene {
-        WindowGroup("영상 검수 도우미") {
+        WindowGroup("매묵 영상 검수 도우미") {
             ContentView()
                 .uiFont(.body)
                 .environmentObject(model)

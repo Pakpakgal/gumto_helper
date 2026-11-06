@@ -1,21 +1,19 @@
-# 영상 검수 도우미
+# 매묵 영상 검수 도우미
 
 로컬 MP4/MOV/M4V 파일에서 컷, 디졸브, 화면 자막 변화 후보를 찾는 네이티브 macOS 앱입니다.
 
 ## 📥 최신 버전 다운로드
 
-[![최신 DMG 다운로드](https://img.shields.io/badge/Download-최신_DMG_다운로드_(v0.3.4)-blue?style=for-the-badge&logo=apple)](https://github.com/Pakpakgal/gumto_helper/releases/latest/download/MaeMook_v0.3.4.dmg)
+[![최신 DMG 다운로드](https://img.shields.io/badge/Download-최신_DMG_다운로드_(v0.3.5)-blue?style=for-the-badge&logo=apple)](https://github.com/Pakpakgal/gumto_helper/releases/latest/download/MaeMook_v0.3.5.dmg)
 
 - **최신 릴리스 바로가기**: [GitHub Releases](https://github.com/Pakpakgal/gumto_helper/releases/latest)
-- **DMG 직접 다운로드**: [MaeMook_v0.3.4.dmg 다운로드](https://github.com/Pakpakgal/gumto_helper/releases/latest/download/MaeMook_v0.3.4.dmg)
+- **DMG 직접 다운로드**: [MaeMook_v0.3.5.dmg 다운로드](https://github.com/Pakpakgal/gumto_helper/releases/latest/download/MaeMook_v0.3.5.dmg)
 
 ## 바로 사용하기
 
-1. 다운로드한 `MaeMook_v0.3.4.dmg`를 엽니다.
-2. `영상 검수 도우미.app`을 `Applications` 폴더로 드래그합니다.
-3. 처음 실행할 때 macOS 보안 알림이 뜨면:
-   - 앱을 **Control-클릭**하고 **열기**를 선택하거나
-   - DMG 안에 포함된 **`설치 도우미.command`**를 더블클릭합니다.
+1. 다운로드한 `MaeMook_v0.3.5.dmg`를 엽니다.
+2. `매묵 영상 검수 도우미.app`을 `Applications` 폴더로 드래그합니다.
+3. 처음 실행할 때 macOS 보안 알림이 뜨면 앱을 **Control-클릭**하고 **열기**를 선택합니다.
 4. 앱에서 **영상 추가**로 여러 영상을 선택하거나 드래그앤드롭합니다.
 5. 영상은 추가한 순서대로 자동 분석되며, 새로운 업데이트가 배포되면 앱 실행 시 자동으로 감지하여 **인앱 원클릭 업데이트**를 지원합니다.
 
@@ -47,7 +45,7 @@
 - 소스: `MacApp/Sources/`
 - 아이콘/Asset Catalog: `MacApp/Assets.xcassets/`
 - 빌드: `./MacApp/build.sh`
-- 결과물: `dist/영상 검수 도우미.app`, `dist/영상 검수 도우미.dmg`
+- 결과물: `dist/매묵 영상 검수 도우미.app`, `dist/매묵 영상 검수 도우미.dmg`
 
 현재 배포판은 ad-hoc 서명 상태입니다. 팀 외부에 경고 없이 배포하려면 Apple Developer ID 인증서 서명과 Apple 공증이 필요합니다.
 

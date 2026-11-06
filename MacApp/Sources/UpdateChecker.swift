@@ -402,7 +402,7 @@ final class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegat
         return AppUpdateInfo(
             currentVersion: currentVersion,
             latestVersion: cleanVersion,
-            releaseTitle: manifest.title ?? "영상 검수 도우미 v\(cleanVersion)",
+            releaseTitle: manifest.title ?? "매묵 영상 검수 도우미 v\(cleanVersion)",
             releaseNotes: manifest.notes ?? "새로운 업데이트가 배포되었습니다.",
             downloadURL: downloadURL,
             releasePageURL: pageURL,
@@ -485,7 +485,7 @@ struct UpdateProgressSheet: View {
                 .foregroundStyle(.blue)
 
             if let info = checker.availableUpdate {
-                Text("영상 검수 도우미 v\(info.latestVersion)")
+                Text("매묵 영상 검수 도우미 v\(info.latestVersion)")
                     .font(.headline)
             }
 

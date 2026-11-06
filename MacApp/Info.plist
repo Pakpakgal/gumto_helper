@@ -3,16 +3,16 @@
 <plist version="1.0">
 <dict>
     <key>CFBundleDevelopmentRegion</key><string>ko</string>
-    <key>CFBundleDisplayName</key><string>영상 검수 도우미</string>
+    <key>CFBundleDisplayName</key><string>매묵 영상 검수 도우미</string>
     <key>CFBundleExecutable</key><string>MaeMook</string>
     <key>CFBundleIconFile</key><string>AppIcon</string>
     <key>CFBundleIconName</key><string>AppIcon</string>
     <key>CFBundleIdentifier</key><string>com.hcc.MaeMook</string>
     <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
-    <key>CFBundleName</key><string>영상 검수 도우미</string>
+    <key>CFBundleName</key><string>매묵 영상 검수 도우미</string>
     <key>CFBundlePackageType</key><string>APPL</string>
-    <key>CFBundleShortVersionString</key><string>0.3.4</string>
-    <key>CFBundleVersion</key><string>8</string>
+    <key>CFBundleShortVersionString</key><string>0.3.5</string>
+    <key>CFBundleVersion</key><string>9</string>
     <key>MaeMookGitHubOwner</key><string>Pakpakgal</string>
     <key>MaeMookGitHubRepo</key><string>gumto_helper</string>
     <key>LSApplicationCategoryType</key><string>public.app-category.video</string>

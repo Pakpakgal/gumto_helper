@@ -129,7 +129,7 @@ struct ContentView: View {
                 .uiFont(.title2)
             VStack(alignment: .leading, spacing: 1) {
                 HStack(spacing: 6) {
-                    Text("영상 검수 도우미").uiFont(.headline)
+                    Text("매묵 영상 검수 도우미").uiFont(.headline)
                     Text("v\(updater.currentVersion)")
                         .uiFont(.caption2.monospacedDigit())
                         .foregroundStyle(.secondary)
