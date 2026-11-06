@@ -72,6 +72,43 @@ enum BibleVerseChecker {
         return normalizeKorean(chunks.joined(separator: " "))
     }
 
+    /// 이전 버전에서 저장된 AnalysisReport의 말씀 자막 대조 결과를 최신 상반절/하반절 로직으로 즉시 갱신합니다.
+    static func refreshReport(_ report: AnalysisReport) -> AnalysisReport {
+        let updatedEvents = report.events.map { event -> ReviewEvent in
+            guard event.kind == .subtitle,
+                  !event.isPrayer,
+                  let text = event.recognizedText,
+                  !event.bibleReferences.isEmpty else {
+                return event
+            }
+            let isIntro = event.bibleComparisons.allSatisfy { $0.status == .referenceOnly } && event.label.contains("본문 안내")
+            guard !isIntro else { return event }
+            let result = analyze(recognizedText: text, references: event.bibleReferences)
+            return ReviewEvent(
+                kind: event.kind,
+                label: event.label,
+                time: event.time,
+                endTime: event.endTime,
+                confidence: event.confidence,
+                thumbnailPath: event.thumbnailPath,
+                recognizedText: event.recognizedText,
+                bibleReferences: result.references,
+                bibleComparisons: result.comparisons,
+                isPrayer: event.isPrayer,
+                grammarSuggestions: event.grammarSuggestions
+            )
+        }
+        return AnalysisReport(
+            videoName: report.videoName,
+            duration: report.duration,
+            width: report.width,
+            height: report.height,
+            createdAt: report.createdAt,
+            events: updatedEvents,
+            loudness: report.loudness
+        )
+    }
+
     // MARK: - Public API
 
     /// OCR 텍스트에서 성경 본문 참조를 조회하고 원문과 대조하여 오류 및 정확도를 분석합니다.
@@ -378,11 +415,9 @@ enum BibleVerseChecker {
     /// 자막에 (상반절), (하반절), (중반절) 등의 표기가 포함되어 있는지 확인합니다.
     private static func extractPartLabel(from rawText: String) -> String? {
         let patterns: [(pattern: String, label: String)] = [
-            (#"(?:\[|\(|\<)?\s*상\s*반\s*절\s*(?:\]|\)|\>)?"#, "상반절"),
-            (#"(?:\[|\(|\<)\s*상\s*반\s*(?:\]|\)|\>)"#, "상반절"),
-            (#"(?:\[|\(|\<)?\s*하\s*반\s*절\s*(?:\]|\)|\>)?"#, "하반절"),
-            (#"(?:\[|\(|\<)\s*하\s*반\s*(?:\]|\)|\>)"#, "하반절"),
-            (#"(?:\[|\(|\<)?\s*중\s*반\s*절\s*(?:\]|\)|\>)?"#, "중반절")
+            (#"(?:\[|\(|\<)?\s*상\s*반\s*[절질점]?\s*(?:\]|\)|\>)?"#, "상반절"),
+            (#"(?:\[|\(|\<)?\s*하\s*반\s*[절질점]?\s*(?:\]|\)|\>)?"#, "하반절"),
+            (#"(?:\[|\(|\<)?\s*중\s*반\s*[절질점]?\s*(?:\]|\)|\>)?"#, "중반절")
         ]
         let ns = rawText as NSString
         let range = NSRange(location: 0, length: ns.length)
@@ -407,7 +442,7 @@ enum BibleVerseChecker {
         }
 
         // (상반절), (하반절), (중반절) 및 괄호가 한쪽 깨진 상반절/하반절 표기 제거
-        let partPattern = #"(?:\[|\(|\<)?\s*(?:상|하|중)\s*반\s*절?\s*(?:\]|\)|\>)?"#
+        let partPattern = #"(?:\[|\(|\<)?\s*(?:상|하|중)\s*반\s*[절질점]?\s*(?:\]|\)|\>)?"#
         if let regex = try? NSRegularExpression(pattern: partPattern) {
             let range = NSRange(location: 0, length: (text as NSString).length)
             text = regex.stringByReplacingMatches(in: text, range: range, withTemplate: " ")

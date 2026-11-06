@@ -4,14 +4,14 @@
 
 ## 📥 최신 버전 다운로드
 
-[![최신 DMG 다운로드](https://img.shields.io/badge/Download-최신_DMG_다운로드_(v0.4.2)-blue?style=for-the-badge&logo=apple)](https://github.com/Pakpakgal/gumto_helper/releases/latest/download/MaeMook_v0.4.2.dmg)
+[![최신 DMG 다운로드](https://img.shields.io/badge/Download-최신_DMG_다운로드_(v0.4.3)-blue?style=for-the-badge&logo=apple)](https://github.com/Pakpakgal/gumto_helper/releases/latest/download/MaeMook_v0.4.3.dmg)
 
 - **최신 릴리스 바로가기**: [GitHub Releases](https://github.com/Pakpakgal/gumto_helper/releases/latest)
-- **DMG 직접 다운로드**: [MaeMook_v0.4.2.dmg 다운로드](https://github.com/Pakpakgal/gumto_helper/releases/latest/download/MaeMook_v0.4.2.dmg)
+- **DMG 직접 다운로드**: [MaeMook_v0.4.3.dmg 다운로드](https://github.com/Pakpakgal/gumto_helper/releases/latest/download/MaeMook_v0.4.3.dmg)
 
 ## 바로 사용하기
 
-1. 다운로드한 `MaeMook_v0.4.2.dmg`를 엽니다.
+1. 다운로드한 `MaeMook_v0.4.3.dmg`를 엽니다.
 2. `매묵 영상 검수 도우미.app`을 `Applications` 폴더로 드래그합니다.
 3. 처음 실행할 때 macOS 보안 알림이 뜨면 앱을 **Control-클릭**하고 **열기**를 선택합니다.
 4. 앱에서 **영상 추가**로 여러 영상을 선택하거나 드래그앤드롭합니다.
@@ -21,6 +21,7 @@
 
 - 여러 영상을 탭으로 열고 **파일명 날짜/이름 오름차순**으로 대기열 자동 정렬 및 순차 분석 (분석 중 추가 시 대기 중인 항목 자동 재정렬)
 - 별도 분석 상태 창에서 영상별 대기·진행·완료·실패 확인
+- **분석 결과 로그 (오탐 리포트)** 창(⌘⇧R) 및 후보별 **오탐 리포트** 원클릭 복사·체크 기능 (`~/Library/Application Support/com.hcc.MaeMook/analysis.log`)
 - **에러 로그** 창(⌘⇧L)에서 분석·음량·파일 입출력·업데이트 오류의 상세 원인(NSError 코드/도메인) 확인, 복사 및 로그 파일(`~/Library/Application Support/com.hcc.MaeMook/error.log`) 열기
 - 앱 실행 시 및 상단 **업데이트 확인** 버튼으로 GitHub Releases(또는 커스텀 배포 주소)의 최신 버전을 확인하고 **"업데이트 버전이 있습니다"** 알림 및 DMG 다운로드 연결
 - 작업 목록과 완료 결과를 저장해 앱을 다시 열어도 검토 가능

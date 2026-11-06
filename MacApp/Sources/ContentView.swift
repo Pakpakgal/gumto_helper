@@ -7,6 +7,7 @@ struct ContentView: View {
     @EnvironmentObject private var model: AppModel
     @EnvironmentObject private var logger: AppLogger
     @EnvironmentObject private var updater: UpdateChecker
+    @ObservedObject private var analysisLogger = AnalysisLogger.shared
     @State private var isDropTarget = false
     @Environment(\.openWindow) private var openWindow
 
@@ -23,6 +24,16 @@ struct ContentView: View {
             else { reviewWorkspace }
         }
         .background(Color(nsColor: .windowBackgroundColor))
+        .alert("이전 분석 내역을 불러올까요?", isPresented: $model.showRestorePrompt) {
+            Button("불러올까요? (이전 내역 불러오기)") {
+                model.confirmRestoreSession()
+            }
+            Button("새로 시작하기", role: .destructive) {
+                model.startFreshSession()
+            }
+        } message: {
+            Text(model.pendingSessionSummary)
+        }
         .alert("오류", isPresented: Binding(
             get: { model.errorMessage != nil },
             set: { if !$0 { model.errorMessage = nil } }
@@ -154,6 +165,15 @@ struct ContentView: View {
                 }
                 .disabled(updater.isChecking)
             }
+            Button {
+                openWindow(id: "analysis-log")
+            } label: {
+                Label(
+                    analysisLogger.flaggedCount > 0 ? "분석 로그 (오탐 \(analysisLogger.flaggedCount))" : "분석 로그",
+                    systemImage: analysisLogger.flaggedCount > 0 ? "flag.fill" : "doc.text.below.ecg"
+                )
+            }
+            .tint(analysisLogger.flaggedCount > 0 ? .orange : nil)
             Button {
                 openWindow(id: "error-log")
             } label: {
@@ -362,7 +382,13 @@ struct ContentView: View {
                 ScrollViewReader { proxy in
                     List(events) { event in
                         let isCurrent = event.id == currentID
-                        EventRow(event: event, color: event.isPrayer ? Color.purple : color(event.kind), onBible: model.openBible)
+                        EventRow(
+                            event: event,
+                            videoName: model.videoURL?.lastPathComponent ?? "영상",
+                            videoDuration: max(model.videoDuration, model.report?.duration ?? 0),
+                            color: color(event.kind),
+                            onBible: model.openBible
+                        )
                             .contentShape(Rectangle())
                             .onTapGesture { model.seek(to: max(0, event.time - 1)) }
                             .padding(.horizontal, 6)
@@ -513,8 +539,16 @@ struct ContentView: View {
 
 private struct EventRow: View {
     let event: ReviewEvent
+    let videoName: String
+    let videoDuration: Double
     let color: Color
     let onBible: (BibleReference) -> Void
+    @ObservedObject private var analysisLogger = AnalysisLogger.shared
+    @State private var copiedFlag = false
+
+    private var isFlagged: Bool {
+        analysisLogger.isFlagged(eventID: event.id, videoName: videoName, time: event.time, label: event.label)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -537,8 +571,29 @@ private struct EventRow: View {
                     } else {
                         Text(formatTime(event.time)).uiFont(.caption.monospacedDigit())
                     }
-                    Text("신뢰도 \(Int(event.confidence * 100))%")
-                        .uiFont(.caption2).foregroundStyle(.secondary)
+                    HStack(spacing: 6) {
+                        Text("신뢰도 \(Int(event.confidence * 100))%")
+                            .uiFont(.caption2).foregroundStyle(.secondary)
+                        Button {
+                            analysisLogger.flagAndCopyEvent(event, videoName: videoName, videoDuration: videoDuration)
+                            copiedFlag = true
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                                copiedFlag = false
+                            }
+                        } label: {
+                            HStack(spacing: 3) {
+                                Image(systemName: copiedFlag ? "checkmark" : (isFlagged ? "flag.fill" : "flag"))
+                                Text(copiedFlag ? "오탐 복사됨" : (isFlagged ? "오탐 기록됨" : "오탐 리포트"))
+                            }
+                            .uiFont(.caption2.weight(.medium))
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background((isFlagged || copiedFlag ? Color.red : Color.secondary).opacity(0.12), in: Capsule())
+                            .foregroundStyle(copiedFlag ? .green : (isFlagged ? .red : .secondary))
+                        }
+                        .buttonStyle(.plain)
+                        .help("오탐 로그에 기록하고 리포팅용 상세 내역을 클립보드에 복사합니다")
+                    }
                 }
                 Spacer(minLength: 0)
             }
@@ -843,7 +898,7 @@ private struct IntegratedTimeline: View {
                         let spanSec = max(0.2, endSec - event.time)
                         let spanWidth = duration > 0 ? max(6, width * (spanSec / max(duration, 0.1))) : 6
                         let xOffset = min(max(0, width * startRatio), max(0, width - spanWidth))
-                        let barColor = event.isPrayer ? Color.purple : color(.subtitle)
+                        let barColor = color(.subtitle)
 
                         RoundedRectangle(cornerRadius: 3)
                             .fill(barColor.opacity(0.88))
@@ -867,7 +922,7 @@ private struct IntegratedTimeline: View {
                     // 상단 자막 구간과 이어지는 시작 지점 미세 마커
                     ForEach(subs) { event in
                         let start = duration > 0 ? event.time / duration : 0
-                        let barColor = event.isPrayer ? Color.purple : color(.subtitle)
+                        let barColor = color(.subtitle)
                         RoundedRectangle(cornerRadius: 1)
                             .fill(barColor.opacity(0.65))
                             .frame(width: 2, height: 12)

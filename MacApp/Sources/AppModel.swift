@@ -16,7 +16,9 @@ final class AppModel: ObservableObject {
     @Published var isPlaying = false
     @Published var videoDuration = 0.0
     @Published var filterOnlyBible = false
+    @Published var showRestorePrompt = false
 
+    private var pendingSession: SavedSession?
     private var queueTask: Task<Void, Never>?
     private var activeTask: Task<AnalysisReport, Error>?
     private var activeID: UUID?
@@ -60,7 +62,16 @@ final class AppModel: ObservableObject {
             default: return event
             }
         }
-        restoreSession()
+        checkSavedSessionOnLaunch()
+    }
+
+    var pendingSessionSummary: String {
+        guard let session = pendingSession, !session.items.isEmpty else {
+            return "이전에 분석하던 작업 내역이 있습니다."
+        }
+        let names = session.items.prefix(3).map { $0.url.lastPathComponent }.joined(separator: ", ")
+        let extra = session.items.count > 3 ? " 외 \(session.items.count - 3)개" : ""
+        return "이전에 작업한 영상 \(session.items.count)개(\(names)\(extra)) 기록이 남아 있습니다.\n이전 분석 결과를 불러올까요, 아니면 새로 시작할까요?"
     }
 
     private struct SavedItem: Codable {
@@ -111,12 +122,36 @@ final class AppModel: ObservableObject {
         }
     }
 
-    private func restoreSession() {
+    private func checkSavedSessionOnLaunch() {
         guard let data = try? Data(contentsOf: sessionURL),
-              let session = try? JSONDecoder().decode(SavedSession.self, from: data) else { return }
+              let session = try? JSONDecoder().decode(SavedSession.self, from: data),
+              !session.items.isEmpty else { return }
+        pendingSession = session
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
+            guard let self, self.pendingSession != nil else { return }
+            self.showRestorePrompt = true
+        }
+    }
+
+    func confirmRestoreSession() {
+        guard let session = pendingSession else { return }
+        pendingSession = nil
+        showRestorePrompt = false
+        applyRestoredSession(session)
+    }
+
+    func startFreshSession() {
+        pendingSession = nil
+        showRestorePrompt = false
+        items.removeAll()
+        selectedID = nil
+        try? FileManager.default.removeItem(at: sessionURL)
+    }
+
+    private func applyRestoredSession(_ session: SavedSession) {
         items = session.items.map { saved in
             var item = AnalysisItem(id: saved.id, url: saved.url)
-            item.report = saved.report
+            item.report = saved.report.map { BibleVerseChecker.refreshReport($0) }
             item.state = saved.state == .running ? .queued : saved.state
             item.progress = item.state == .completed ? 1 : 0
             item.status = saved.state == .running ? "이전 분석을 다시 시작하는 중…" : saved.status
@@ -139,7 +174,11 @@ final class AppModel: ObservableObject {
         }
         if let id = session.selectedID, items.contains(where: { $0.id == id }) { selectItem(id) }
         else if let first = items.first { selectItem(first.id) }
+        for report in items.compactMap(\.report) {
+            AnalysisLogger.shared.recordReport(report, replaceExistingForVideo: true)
+        }
         reorderQueuedItems()
+        saveSession()
         startQueueIfNeeded()
     }
 
@@ -182,6 +221,10 @@ final class AppModel: ObservableObject {
     }
 
     func addVideos(_ urls: [URL], enqueue: Bool = true) {
+        if pendingSession != nil {
+            pendingSession = nil
+            showRestorePrompt = false
+        }
         let supported = urls
             .filter { ["mp4", "mov", "m4v"].contains($0.pathExtension.lowercased()) }
             .sorted(by: Self.compareVideoOrder)
@@ -386,6 +429,7 @@ final class AppModel: ObservableObject {
                         self.items[index].progress = 1
                         self.items[index].state = .completed
                         self.items[index].status = "분석 완료 · 후보 \(result.events.count)개"
+                        AnalysisLogger.shared.recordReport(result)
                     }
                 } catch is CancellationError {
                     if let index = self.items.firstIndex(where: { $0.id == id }), self.items[index].state == .running {

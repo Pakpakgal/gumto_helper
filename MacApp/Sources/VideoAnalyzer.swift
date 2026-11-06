@@ -32,6 +32,7 @@ enum VideoAnalyzer {
         let time: Double
         let difference: Double
         let histogramDifference: Double
+        let lowerDifference: Double
         var textChanged: Bool
         var hasText: Bool
         var recognizedText: String?
@@ -180,6 +181,7 @@ enum VideoAnalyzer {
             let sceneHash = perceptualHash(gray, width: metricWidth)
             let difference = previousGray.map { meanDifference(gray, $0) } ?? 0
             let histogramDifference = previousHistogram.map { histogramDistance(histogram, $0) } ?? 0
+            let lowerDifference = (!strip.isEmpty ? lowerLast.map { changedFraction(strip, $0) } : nil) ?? 0
 
             let needsOCR = shouldRunOCR(
                 difference: difference,
@@ -243,6 +245,7 @@ enum VideoAnalyzer {
                 time: timestamp,
                 difference: difference,
                 histogramDifference: histogramDifference,
+                lowerDifference: lowerDifference,
                 textChanged: false,
                 hasText: false,
                 recognizedText: nil,
@@ -827,6 +830,9 @@ enum VideoAnalyzer {
             return detected
         }
 
+        var subtitleSpans: [(startIndex: Int, lastActiveIndex: Int, startTime: Double, endTime: Double)] = []
+        var subtitleEvents: [ReviewEvent] = []
+
         for (startIndex, sample, text, fromLowerThird) in subtitleDetections {
             let normalized = normalizedText(text)
             let isDuplicate = acceptedSubtitles.suffix(20).contains { previous in
@@ -851,13 +857,14 @@ enum VideoAnalyzer {
             }
             let frameDuration = 1.0 / sampleFPS
             let subtitleEndTime = min(duration, max(sample.time + max(0.5, frameDuration), samples[lastActiveIndex].time + frameDuration))
+            subtitleSpans.append((startIndex: startIndex, lastActiveIndex: lastActiveIndex, startTime: sample.time, endTime: subtitleEndTime))
 
             let hasPrayLabel = KoreanGrammarChecker.hasPrayLabel(text)
             let continuedPrayer = lastPrayerTime.map { sample.time - $0 <= Self.prayerContinuationSeconds } == true
             if hasPrayLabel || continuedPrayer {
                 if hasPrayLabel { lastPrayerTime = sample.time }
                 let suggestions = KoreanGrammarChecker.check(text)
-                events.append(ReviewEvent(
+                subtitleEvents.append(ReviewEvent(
                     kind: .subtitle,
                     label: "기도문 자막",
                     time: sample.time,
@@ -911,7 +918,7 @@ enum VideoAnalyzer {
                 comparisons = []
             }
 
-            events.append(ReviewEvent(
+            subtitleEvents.append(ReviewEvent(
                 kind: .subtitle,
                 label: eventLabel,
                 time: sample.time,
@@ -925,6 +932,74 @@ enum VideoAnalyzer {
             ))
             acceptedSubtitles.append((hash: sample.sceneHash, text: normalized))
         }
+
+        // 자막이 들어갈 때(등장 시점) 발생하는 화면 변화는 컷/디졸브가 아니라 항상 주황색 '자막'으로만 기록하도록 필터링
+        events.removeAll { transition in
+            guard transition.kind != .subtitle else { return false }
+            let tEnd = transition.endTime ?? transition.time
+            return subtitleSpans.contains { span in
+                abs(transition.time - span.startTime) <= 0.65 ||
+                (transition.time <= span.startTime + 0.3 && tEnd >= span.startTime - 0.3)
+            }
+        }
+
+        // 자막이 나갈 때(퇴장 시점)에 대해서는 컷인지 디졸브인지 구분하여 기록
+        for (idx, span) in subtitleSpans.enumerated() {
+            // 바로 다음 자막이 이어서 들어오는 경우(0.6초 이내)는 다음 자막 진입이므로 별도 퇴장 전환 생략
+            if idx + 1 < subtitleSpans.count, subtitleSpans[idx + 1].startTime - span.endTime <= 0.60 {
+                continue
+            }
+            guard span.lastActiveIndex < samples.count - 2 else { continue }
+
+            // 이미 해당 퇴장 시점에 일반 컷/디졸브가 잡혀 있으면 라벨만 명확히 보강
+            if let existingIdx = events.firstIndex(where: { $0.kind != .subtitle && abs($0.time - span.endTime) <= 0.65 }) {
+                let existing = events[existingIdx]
+                let newLabel = existing.kind == .dissolve ? "자막 퇴장 (디졸브)" : "자막 퇴장 (컷 전환)"
+                events[existingIdx] = ReviewEvent(
+                    kind: existing.kind,
+                    label: newLabel,
+                    time: existing.time,
+                    endTime: existing.endTime,
+                    confidence: existing.confidence
+                )
+                continue
+            }
+
+            // 퇴장 구간 주변 프레임의 변화 지속 여부로 컷 vs 디졸브 판별
+            let winStart = max(1, span.lastActiveIndex - 2)
+            let winEnd = min(samples.count - 1, span.lastActiveIndex + 5)
+            var activeTransitionFrames: [Int] = []
+            for k in winStart...winEnd {
+                if samples[k].difference >= moderate * 0.65 || samples[k].lowerDifference >= 0.015 {
+                    activeTransitionFrames.append(k)
+                }
+            }
+
+            if activeTransitionFrames.count >= 2,
+               let firstFrame = activeTransitionFrames.first,
+               let lastFrame = activeTransitionFrames.last,
+               lastFrame - firstFrame >= 1 {
+                let dStart = samples[firstFrame].time
+                let dEnd = max(dStart + (2.0 / sampleFPS), samples[lastFrame].time)
+                events.append(ReviewEvent(
+                    kind: .dissolve,
+                    label: "자막 퇴장 (디졸브)",
+                    time: dStart,
+                    endTime: min(duration, dEnd),
+                    confidence: min(0.92, 0.68 + Double(activeTransitionFrames.count) * 0.05)
+                ))
+            } else {
+                let exitSampleIdx = min(samples.count - 1, span.lastActiveIndex + 1)
+                events.append(ReviewEvent(
+                    kind: .cut,
+                    label: "자막 퇴장 (컷 전환)",
+                    time: samples[exitSampleIdx].time,
+                    confidence: 0.84
+                ))
+            }
+        }
+
+        events.append(contentsOf: subtitleEvents)
         return merge(events).sorted { $0.time < $1.time }
     }
 

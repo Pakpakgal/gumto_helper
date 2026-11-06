@@ -32,6 +32,13 @@ struct MaeMookApp: App {
                 .environmentObject(logger)
                 .frame(minWidth: 680, minHeight: 440)
         }
+
+        Window("분석 결과 로그 (오탐 리포트)", id: "analysis-log") {
+            AnalysisLogView()
+                .uiFont(.body)
+                .environmentObject(model)
+                .frame(minWidth: 780, minHeight: 500)
+        }
         .commands {
             CommandGroup(after: .appInfo) {
                 Button("업데이트 확인…") {
@@ -41,6 +48,10 @@ struct MaeMookApp: App {
                     updater.showSourceConfigSheet = true
                 }
                 Divider()
+                Button("분석 결과 로그 (오탐 리포트)…") {
+                    openWindow(id: "analysis-log")
+                }
+                .keyboardShortcut("r", modifiers: [.command, .shift])
                 Button("에러 로그 보기…") {
                     openWindow(id: "error-log")
                 }
