@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleDevelopmentRegion</key><string>ko</string>
+    <key>CFBundleDisplayName</key><string>영상 검수 도우미</string>
+    <key>CFBundleExecutable</key><string>MaeMook</string>
+    <key>CFBundleIconFile</key><string>AppIcon</string>
+    <key>CFBundleIconName</key><string>AppIcon</string>
+    <key>CFBundleIdentifier</key><string>com.hcc.MaeMook</string>
+    <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
+    <key>CFBundleName</key><string>영상 검수 도우미</string>
+    <key>CFBundlePackageType</key><string>APPL</string>
+    <key>CFBundleShortVersionString</key><string>0.3.3</string>
+    <key>CFBundleVersion</key><string>7</string>
+    <key>MaeMookGitHubOwner</key><string>Pakpakgal</string>
+    <key>MaeMookGitHubRepo</key><string>gumto_helper</string>
+    <key>LSApplicationCategoryType</key><string>public.app-category.video</string>
+    <key>LSMinimumSystemVersion</key><string>13.0</string>
+    <key>NSHighResolutionCapable</key><true/>
+    <key>CFBundleDocumentTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleTypeName</key><string>Video</string>
+            <key>CFBundleTypeRole</key><string>Viewer</string>
+            <key>LSHandlerRank</key><string>Alternate</string>
+            <key>LSItemContentTypes</key>
+            <array><string>public.movie</string><string>public.mpeg-4</string></array>
+        </dict>
+    </array>
+</dict>
+</plist>
