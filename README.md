@@ -4,30 +4,30 @@
 
 ## 📥 최신 버전 다운로드
 
-[![최신 DMG 다운로드](https://img.shields.io/badge/Download-최신_DMG_다운로드_(v0.3.6)-blue?style=for-the-badge&logo=apple)](https://github.com/Pakpakgal/gumto_helper/releases/latest/download/MaeMook_v0.3.6.dmg)
+[![최신 DMG 다운로드](https://img.shields.io/badge/Download-최신_DMG_다운로드_(v0.4.1)-blue?style=for-the-badge&logo=apple)](https://github.com/Pakpakgal/gumto_helper/releases/latest/download/MaeMook_v0.4.1.dmg)
 
 - **최신 릴리스 바로가기**: [GitHub Releases](https://github.com/Pakpakgal/gumto_helper/releases/latest)
-- **DMG 직접 다운로드**: [MaeMook_v0.3.6.dmg 다운로드](https://github.com/Pakpakgal/gumto_helper/releases/latest/download/MaeMook_v0.3.6.dmg)
+- **DMG 직접 다운로드**: [MaeMook_v0.4.1.dmg 다운로드](https://github.com/Pakpakgal/gumto_helper/releases/latest/download/MaeMook_v0.4.1.dmg)
 
 ## 바로 사용하기
 
-1. 다운로드한 `MaeMook_v0.3.6.dmg`를 엽니다.
+1. 다운로드한 `MaeMook_v0.4.1.dmg`를 엽니다.
 2. `매묵 영상 검수 도우미.app`을 `Applications` 폴더로 드래그합니다.
 3. 처음 실행할 때 macOS 보안 알림이 뜨면 앱을 **Control-클릭**하고 **열기**를 선택합니다.
 4. 앱에서 **영상 추가**로 여러 영상을 선택하거나 드래그앤드롭합니다.
-5. 영상은 추가한 순서대로 자동 분석되며, 새로운 업데이트가 배포되면 앱 실행 시 자동으로 감지하여 **인앱 원클릭 업데이트**를 지원합니다.
+5. 영상은 **파일명의 날짜/이름 순서(앞선 날짜 우선)**로 자동 정렬되어 분석되며, 분석 도중 새 영상이 추가되면 현재 분석 중인 영상은 그대로 진행하고 대기열의 영상들만 날짜순으로 자동 재배열됩니다. 새로운 업데이트가 배포되면 앱 실행 시 자동으로 감지하여 **인앱 원클릭 업데이트**를 지원합니다.
 
 ## 기능
 
-- 여러 영상을 탭으로 열고 순서대로 자동 분석
+- 여러 영상을 탭으로 열고 **파일명 날짜/이름 오름차순**으로 대기열 자동 정렬 및 순차 분석 (분석 중 추가 시 대기 중인 항목 자동 재정렬)
 - 별도 분석 상태 창에서 영상별 대기·진행·완료·실패 확인
 - **에러 로그** 창(⌘⇧L)에서 분석·음량·파일 입출력·업데이트 오류의 상세 원인(NSError 코드/도메인) 확인, 복사 및 로그 파일(`~/Library/Application Support/com.hcc.MaeMook/error.log`) 열기
 - 앱 실행 시 및 상단 **업데이트 확인** 버튼으로 GitHub Releases(또는 커스텀 배포 주소)의 최신 버전을 확인하고 **"업데이트 버전이 있습니다"** 알림 및 DMG 다운로드 연결
 - 작업 목록과 완료 결과를 저장해 앱을 다시 열어도 검토 가능
 
-- 마커와 합쳐진 단일 재생바에서 클릭·드래그 탐색
+- 재생 프로그레스바 상단에 **자막 지속 구간(Range Bar)** 표시 및 클릭·드래그 탐색
 - Space 재생/일시정지, ←/→ 3초 이동
-- Q/↓ 감속, W 정속, E/↑ 가속 재생(0.1×~10×, 피치 유지)
+- Q/↓ 감속, **W 정속(1.0×) ↔ 직전 배속 토글**, E/↑ 가속 재생(0.1×~10×, 피치 유지)
 - 컷/디졸브/화면 자막 변화 후보 검출
 - 같은 장면·유사 자막의 반복 후보 억제
 - 통합 LUFS·sample peak 측정 및 YouTube 실무 기준 판정

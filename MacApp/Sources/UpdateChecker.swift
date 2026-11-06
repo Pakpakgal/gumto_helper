@@ -193,7 +193,7 @@ final class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegat
         }
     }
 
-    private static func prepareInstallationScript(dmgURL: URL, currentAppURL: URL) throws -> URL {
+    nonisolated private static func prepareInstallationScript(dmgURL: URL, currentAppURL: URL) throws -> URL {
         let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("MaeMookInstaller-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
         let scriptURL = tempDir.appendingPathComponent("install_and_restart.sh")

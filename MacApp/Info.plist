@@ -11,8 +11,8 @@
     <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
     <key>CFBundleName</key><string>매묵 영상 검수 도우미</string>
     <key>CFBundlePackageType</key><string>APPL</string>
-    <key>CFBundleShortVersionString</key><string>0.3.6</string>
-    <key>CFBundleVersion</key><string>10</string>
+    <key>CFBundleShortVersionString</key><string>0.4.1</string>
+    <key>CFBundleVersion</key><string>12</string>
     <key>MaeMookGitHubOwner</key><string>Pakpakgal</string>
     <key>MaeMookGitHubRepo</key><string>gumto_helper</string>
     <key>LSApplicationCategoryType</key><string>public.app-category.video</string>

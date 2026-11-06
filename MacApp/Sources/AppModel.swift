@@ -12,6 +12,7 @@ final class AppModel: ObservableObject {
     @Published var enabledKinds = Set(ReviewEventKind.allCases)
     @Published var currentTime = 0.0
     @Published var playbackRate = 1.0
+    @Published var previousPlaybackRate: Double?
     @Published var isPlaying = false
     @Published var videoDuration = 0.0
     @Published var filterOnlyBible = false
@@ -138,6 +139,7 @@ final class AppModel: ObservableObject {
         }
         if let id = session.selectedID, items.contains(where: { $0.id == id }) { selectItem(id) }
         else if let first = items.first { selectItem(first.id) }
+        reorderQueuedItems()
         startQueueIfNeeded()
     }
 
@@ -180,7 +182,9 @@ final class AppModel: ObservableObject {
     }
 
     func addVideos(_ urls: [URL], enqueue: Bool = true) {
-        let supported = urls.filter { ["mp4", "mov", "m4v"].contains($0.pathExtension.lowercased()) }
+        let supported = urls
+            .filter { ["mp4", "mov", "m4v"].contains($0.pathExtension.lowercased()) }
+            .sorted(by: Self.compareVideoOrder)
         if supported.count != urls.count {
             let rejected = urls.filter { !["mp4", "mov", "m4v"].contains($0.pathExtension.lowercased()) }
             errorMessage = "MP4, MOV 또는 M4V 영상만 추가할 수 있습니다."
@@ -191,6 +195,7 @@ final class AppModel: ObservableObject {
                 details: rejected.map(\.path).joined(separator: "\n")
             )
         }
+        let hadSelection = selectedID != nil
         var firstAdded: UUID?
         for url in supported {
             if let existing = items.first(where: { $0.url.standardizedFileURL == url.standardizedFileURL }) {
@@ -207,9 +212,100 @@ final class AppModel: ObservableObject {
             items.append(item)
             if firstAdded == nil { firstAdded = item.id }
         }
-        if let firstAdded { selectItem(firstAdded) }
+        reorderQueuedItems()
+        if !hadSelection, let firstQueued = items.first(where: { $0.state == .queued })?.id ?? firstAdded {
+            selectItem(firstQueued)
+        } else if let firstAdded, selectedID == nil {
+            selectItem(firstAdded)
+        }
         saveSession()
         if enqueue { startQueueIfNeeded() }
+    }
+
+    /// 현재 분석 중(.running)이거나 완료된 항목은 건드리지 않고,
+    /// 아직 대기열(.queued)에 있는 항목들만 파일명의 날짜/이름 오름차순으로 재정렬합니다.
+    private func reorderQueuedItems() {
+        let queuedIndices = items.indices.filter { items[$0].state == .queued }
+        guard queuedIndices.count > 1 else { return }
+        let sortedQueued = queuedIndices.map { items[$0] }.sorted { Self.compareVideoOrder($0.url, $1.url) }
+        for (slotIndex, itemIndex) in queuedIndices.enumerated() {
+            items[itemIndex] = sortedQueued[slotIndex]
+        }
+    }
+
+    /// 파일명에서 날짜(연·월·일 또는 월·일)를 우선 추출하여 앞서 있는 날짜가 먼저 오도록 비교하고,
+    /// 날짜가 같거나 없으면 자연 정렬(localizedStandardCompare)로 비교합니다.
+    private static func compareVideoOrder(_ lhs: URL, _ rhs: URL) -> Bool {
+        let lhsName = lhs.deletingPathExtension().lastPathComponent
+        let rhsName = rhs.deletingPathExtension().lastPathComponent
+        let lhsDate = extractDateSortKey(from: lhsName)
+        let rhsDate = extractDateSortKey(from: rhsName)
+
+        if let lKey = lhsDate, let rKey = rhsDate, lKey != rKey {
+            return lKey < rKey
+        }
+        let cmp = lhsName.localizedStandardCompare(rhsName)
+        if cmp != .orderedSame {
+            return cmp == .orderedAscending
+        }
+        return lhs.path < rhs.path
+    }
+
+    /// 파일명에서 날짜 패턴(YYYY-MM-DD, YYYYMMDD, YYMMDD, YY.MM.DD, MM월 DD일, MM-DD, MMDD 등)을 찾아
+    /// 비교 가능한 정수 키(YYYYMMDD)로 변환합니다.
+    private static func extractDateSortKey(from filename: String) -> Int? {
+        let ns = filename as NSString
+        let fullRange = NSRange(location: 0, length: ns.length)
+
+        func intGroup(_ match: NSTextCheckingResult, _ idx: Int) -> Int? {
+            let r = match.range(at: idx)
+            guard r.location != NSNotFound else { return nil }
+            return Int(ns.substring(with: r))
+        }
+
+        // 1) 4자리 연도 포함: 2026-11-06, 2026.11.6, 2026년 11월 6일, 20261106
+        let fullYearPattern = #"(?:^|[^\d])(20\d{2})[\s._\-/년]*(0?[1-9]|1[0-2])[\s._\-/월]*(0?[1-9]|[12]\d|3[01])(?:일|[^\d]|$)"#
+        if let regex = try? NSRegularExpression(pattern: fullYearPattern),
+           let match = regex.firstMatch(in: filename, range: fullRange),
+           let y = intGroup(match, 1), let m = intGroup(match, 2), let d = intGroup(match, 3) {
+            return y * 10000 + m * 100 + d
+        }
+
+        // 2) 2자리 연도 + 구분자/한글: 26-11-06, 26.11.6, 26년 11월 6일
+        let shortYearDelimPattern = #"(?:^|[^\d])([23]\d)(?:[\s._\-/]+|년\s*)(0?[1-9]|1[0-2])(?:[\s._\-/]+|월\s*)(0?[1-9]|[12]\d|3[01])(?:일|[^\d]|$)"#
+        if let regex = try? NSRegularExpression(pattern: shortYearDelimPattern),
+           let match = regex.firstMatch(in: filename, range: fullRange),
+           let yy = intGroup(match, 1), let m = intGroup(match, 2), let d = intGroup(match, 3) {
+            return (2000 + yy) * 10000 + m * 100 + d
+        }
+
+        // 3) 연속 6자리 YYMMDD: 261106
+        let sixDigitPattern = #"(?:^|[^\d])([23]\d)(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])(?:[^\d]|$)"#
+        if let regex = try? NSRegularExpression(pattern: sixDigitPattern),
+           let match = regex.firstMatch(in: filename, range: fullRange),
+           let yy = intGroup(match, 1), let m = intGroup(match, 2), let d = intGroup(match, 3) {
+            return (2000 + yy) * 10000 + m * 100 + d
+        }
+
+        let currentYear = Calendar.current.component(.year, from: Date())
+
+        // 4) 연도 없는 월·일 표기: 11월 6일, 11-06, 11.06
+        let monthDayDelimPattern = #"(?:^|[^\d])(0?[1-9]|1[0-2])(?:\s*월\s*|[._\-/])(0?[1-9]|[12]\d|3[01])(?:일|[^\d]|$)"#
+        if let regex = try? NSRegularExpression(pattern: monthDayDelimPattern),
+           let match = regex.firstMatch(in: filename, range: fullRange),
+           let m = intGroup(match, 1), let d = intGroup(match, 3 - 1) {
+            return currentYear * 10000 + m * 100 + d
+        }
+
+        // 5) 연속 4자리 MMDD: 1106
+        let fourDigitPattern = #"(?:^|[^\d])(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])(?:[^\d]|$)"#
+        if let regex = try? NSRegularExpression(pattern: fourDigitPattern),
+           let match = regex.firstMatch(in: filename, range: fullRange),
+           let m = intGroup(match, 1), let d = intGroup(match, 2) {
+            return currentYear * 10000 + m * 100 + d
+        }
+
+        return nil
     }
 
     func openVideo(_ url: URL) { addVideos([url], enqueue: false) }
@@ -253,6 +349,7 @@ final class AppModel: ObservableObject {
         items[index].errorMessage = nil
         items[index].errorDetails = nil
         items[index].status = "분석 순서를 기다리는 중…"
+        reorderQueuedItems()
         saveSession()
         startQueueIfNeeded()
     }
@@ -261,7 +358,9 @@ final class AppModel: ObservableObject {
         guard queueTask == nil else { return }
         queueTask = Task { [weak self] in
             guard let self else { return }
-            while let item = self.items.first(where: { $0.state == .queued }) {
+            while true {
+                self.reorderQueuedItems()
+                guard let item = self.items.first(where: { $0.state == .queued }) else { break }
                 let id = item.id
                 guard let index = self.items.firstIndex(where: { $0.id == id }) else { continue }
                 self.items[index].state = .running
@@ -371,14 +470,31 @@ final class AppModel: ObservableObject {
         let target = playbackRates.last(where: { $0 < playbackRate - 0.001 }) ?? 0.1
         setPlaybackRate(target)
     }
-    func normalSpeed() { setPlaybackRate(1.0) }
+
+    /// W 키 / 정속 버튼: 현재 배속이 1.0×가 아니면 직전 배속을 기억하고 1.0×(정속)으로 전환하며,
+    /// 현재 1.0× 상태에서 다시 누르면 기억해 둔 직전 배속으로 토글 복귀합니다.
+    func normalSpeed() {
+        if abs(playbackRate - 1.0) > 0.001 {
+            previousPlaybackRate = playbackRate
+            setPlaybackRate(1.0)
+        } else if let prev = previousPlaybackRate, abs(prev - 1.0) > 0.001 {
+            setPlaybackRate(prev)
+        } else {
+            setPlaybackRate(1.0)
+        }
+    }
+
     func faster() {
         let target = playbackRates.first(where: { $0 > playbackRate + 0.001 }) ?? 10
         setPlaybackRate(target)
     }
 
     func setPlaybackRate(_ rate: Double) {
-        playbackRate = min(10, max(0.1, rate))
+        let clamped = min(10, max(0.1, rate))
+        if abs(clamped - 1.0) > 0.001 {
+            previousPlaybackRate = clamped
+        }
+        playbackRate = clamped
         player.currentItem?.audioTimePitchAlgorithm = .spectral
         if isPlaying { player.playImmediately(atRate: Float(playbackRate)) }
     }

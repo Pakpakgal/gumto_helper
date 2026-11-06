@@ -57,6 +57,21 @@ enum BibleVerseChecker {
         return nil
     }
 
+    /// 주어진 참조 범위의 원문 전체 문자열(공백·기호 제거 정규화)을 반환합니다.
+    static func normalizedScripture(for references: [BibleReference]) -> String {
+        var chunks: [String] = []
+        for ref in references {
+            let start = ref.verse
+            let end = max(start, ref.endVerse ?? ref.verse)
+            for v in start...end {
+                if let text = verses[ref.book]?[ref.chapter]?[v] {
+                    chunks.append(text)
+                }
+            }
+        }
+        return normalizeKorean(chunks.joined(separator: " "))
+    }
+
     // MARK: - Public API
 
     /// OCR 텍스트에서 성경 본문 참조를 조회하고 원문과 대조하여 오류 및 정확도를 분석합니다.

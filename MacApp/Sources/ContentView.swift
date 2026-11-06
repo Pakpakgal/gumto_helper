@@ -261,16 +261,25 @@ struct ContentView: View {
             HStack(spacing: 7) {
                 Text("재생 속도").uiFont(.caption).foregroundStyle(.secondary)
                 speedButton("Q / ↓", label: "감속", action: model.slower)
-                speedButton("W", label: "정속", action: model.normalSpeed)
+                speedButton("W", label: wButtonLabel, action: model.normalSpeed)
                 speedButton("E / ↑", label: "가속", action: model.faster)
                 Text(String(format: "%.2f×", model.playbackRate))
                     .uiFont(.caption.monospacedDigit().weight(.semibold))
                     .fixedSize()
                 Spacer()
-                Text("마커를 포함한 재생바를 클릭하거나 드래그해 이동")
+                Text("상단 바: 자막 구간 · 하단 바: 전환 마커 및 탐색")
                     .uiFont(.caption2).foregroundStyle(.secondary)
             }
         }.padding(.horizontal, 14).padding(.vertical, 10)
+    }
+
+    private var wButtonLabel: String {
+        if abs(model.playbackRate - 1.0) <= 0.001,
+           let prev = model.previousPlaybackRate,
+           abs(prev - 1.0) > 0.001 {
+            return String(format: "이전(%.2g×)", prev)
+        }
+        return "정속"
     }
 
     private func speedButton(_ key: String, label: String, action: @escaping () -> Void) -> some View {
@@ -532,7 +541,11 @@ private struct EventRow: View {
                         Capsule().fill(color).frame(width: 5, height: 20)
                         Text(event.label).uiFont(.subheadline.weight(.semibold)).lineLimit(1)
                     }
-                    Text(formatTime(event.time)).uiFont(.caption.monospacedDigit())
+                    if let endTime = event.endTime, endTime > event.time + 0.2 {
+                        Text("\(formatTime(event.time)) ~ \(formatTime(endTime))").uiFont(.caption.monospacedDigit())
+                    } else {
+                        Text(formatTime(event.time)).uiFont(.caption.monospacedDigit())
+                    }
                     Text("신뢰도 \(Int(event.confidence * 100))%")
                         .uiFont(.caption2).foregroundStyle(.secondary)
                 }
@@ -800,28 +813,95 @@ private struct IntegratedTimeline: View {
     let color: (ReviewEventKind) -> Color
     let onSeek: (Double) -> Void
 
+    private var subtitleEvents: [ReviewEvent] {
+        events.filter { $0.kind == .subtitle }
+    }
+
+    private var transitionEvents: [ReviewEvent] {
+        events.filter { $0.kind != .subtitle }
+    }
+
+    /// 이전 버전 세션 데이터에 endTime이 비어 있을 때도 구간 바를 자연스럽게 표시합니다.
+    private func effectiveEndTime(for event: ReviewEvent, at index: Int, in list: [ReviewEvent]) -> Double {
+        if let end = event.endTime, end > event.time {
+            return min(duration > 0 ? duration : end, end)
+        }
+        let fallbackEnd = event.time + 3.0
+        if index + 1 < list.count {
+            return min(fallbackEnd, max(event.time + 0.4, list[index + 1].time))
+        }
+        return duration > 0 ? min(duration, fallbackEnd) : fallbackEnd
+    }
+
     var body: some View {
         GeometryReader { geometry in
             let width = geometry.size.width
             let progress = duration > 0 ? min(1, max(0, currentTime / duration)) : 0
-            ZStack(alignment: .leading) {
-                Capsule().fill(Color.secondary.opacity(0.22)).frame(height: 10)
-                Capsule().fill(Color.accentColor.opacity(0.75))
-                    .frame(width: width * progress, height: 10)
-                ForEach(events) { event in
-                    let start = duration > 0 ? event.time / duration : 0
-                    let eventWidth = event.endTime.map { max(4, width * (($0 - event.time) / max(duration, 0.1))) } ?? 4
-                    RoundedRectangle(cornerRadius: 2)
-                        .fill(color(event.kind))
-                        .frame(width: eventWidth, height: 18)
-                        .offset(x: min(max(0, width * start), max(0, width - eventWidth)))
+            let subs = subtitleEvents
+            let transitions = transitionEvents
+
+            VStack(alignment: .leading, spacing: 4) {
+                // 상단 레인: 프로그레스 바 위에 표시되는 자막 구간(Range) 바
+                ZStack(alignment: .leading) {
+                    Capsule()
+                        .fill(Color.secondary.opacity(0.10))
+                        .frame(height: 8)
+                    ForEach(Array(subs.enumerated()), id: \.element.id) { index, event in
+                        let startRatio = duration > 0 ? min(1, max(0, event.time / duration)) : 0
+                        let endSec = effectiveEndTime(for: event, at: index, in: subs)
+                        let spanSec = max(0.2, endSec - event.time)
+                        let spanWidth = duration > 0 ? max(6, width * (spanSec / max(duration, 0.1))) : 6
+                        let xOffset = min(max(0, width * startRatio), max(0, width - spanWidth))
+                        let barColor = event.isPrayer ? Color.purple : color(.subtitle)
+
+                        RoundedRectangle(cornerRadius: 3)
+                            .fill(barColor.opacity(0.88))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 3)
+                                    .stroke(Color.white.opacity(0.45), lineWidth: 0.6)
+                            )
+                            .frame(width: spanWidth, height: 8)
+                            .offset(x: xOffset)
+                            .allowsHitTesting(false)
+                    }
+                }
+                .frame(height: 8)
+
+                // 하단 레인: 메인 재생 프로그레스 바 + 컷/디졸브 전환 마커 + 자막 시작 틱
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Color.secondary.opacity(0.22)).frame(height: 10)
+                    Capsule().fill(Color.accentColor.opacity(0.75))
+                        .frame(width: width * progress, height: 10)
+
+                    // 상단 자막 구간과 이어지는 시작 지점 미세 마커
+                    ForEach(subs) { event in
+                        let start = duration > 0 ? event.time / duration : 0
+                        let barColor = event.isPrayer ? Color.purple : color(.subtitle)
+                        RoundedRectangle(cornerRadius: 1)
+                            .fill(barColor.opacity(0.65))
+                            .frame(width: 2, height: 12)
+                            .offset(x: min(max(0, width * start), max(0, width - 2)))
+                            .allowsHitTesting(false)
+                    }
+
+                    // 컷/디졸브 전환 마커
+                    ForEach(transitions) { event in
+                        let start = duration > 0 ? event.time / duration : 0
+                        let eventWidth = event.endTime.map { max(4, width * (($0 - event.time) / max(duration, 0.1))) } ?? 4
+                        RoundedRectangle(cornerRadius: 2)
+                            .fill(color(event.kind))
+                            .frame(width: eventWidth, height: 16)
+                            .offset(x: min(max(0, width * start), max(0, width - eventWidth)))
+                            .allowsHitTesting(false)
+                    }
+
+                    Circle().fill(.white).shadow(radius: 2)
+                        .overlay(Circle().stroke(Color.accentColor, lineWidth: 2))
+                        .frame(width: 16, height: 16)
+                        .offset(x: min(max(0, width * progress - 8), max(0, width - 16)))
                         .allowsHitTesting(false)
                 }
-                Circle().fill(.white).shadow(radius: 2)
-                    .overlay(Circle().stroke(Color.accentColor, lineWidth: 2))
-                    .frame(width: 16, height: 16)
-                    .offset(x: min(max(0, width * progress - 8), max(0, width - 16)))
-                    .allowsHitTesting(false)
+                .frame(height: 18)
             }
             .frame(maxHeight: .infinity)
             .contentShape(Rectangle())
@@ -829,6 +909,6 @@ private struct IntegratedTimeline: View {
                 guard duration > 0, width > 0 else { return }
                 onSeek(duration * min(1, max(0, value.location.x / width)))
             })
-        }.frame(height: 24)
+        }.frame(height: 32)
     }
 }
