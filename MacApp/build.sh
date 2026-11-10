@@ -33,6 +33,11 @@ swiftc "${COMMON[@]}" -target x86_64-apple-macos13.0 "${SOURCES[@]}" -o "$BUILD_
 lipo -create "$BUILD_DIR/MaeMook-arm64" "$BUILD_DIR/MaeMook-x86_64" -output "$CONTENTS/MacOS/MaeMook"
 
 cp "$ROOT_DIR/Info.plist" "$CONTENTS/Info.plist"
+
+# 피드백 토큰 파일이 있으면 번들에 주입(저장소에는 토큰을 넣지 않는다).
+if [ -f "$HOME/.gumto_feedback_token" ]; then
+  /usr/libexec/PlistBuddy -c "Set :MaeMookGitHubToken $(cat "$HOME/.gumto_feedback_token")" "$CONTENTS/Info.plist"
+fi
 # 서명: 기본은 ad-hoc(다른 Mac에서는 Gatekeeper 경고가 뜸).
 # Apple Developer ID 인증서가 있으면 SIGN_IDENTITY="Developer ID Application: 이름 (TEAMID)" 로 지정하고,
 # 공증까지 하려면 NOTARY_PROFILE=<xcrun notarytool store-credentials 로 저장한 프로필 이름> 도 지정한다.

@@ -280,7 +280,7 @@ final class FeedbackModel: ObservableObject {
         ]
         let response = try await githubRequest(
             path: "/repos/\(githubOwner)/\(githubRepo)/contents/\(path)",
-            method: "POST", token: token, json: json)
+            method: "PUT", token: token, json: json)
         guard let obj = try JSONSerialization.jsonObject(with: response) as? [String: Any],
               let content = obj["content"] as? [String: Any],
               let downloadURL = content["download_url"] as? String, !downloadURL.isEmpty else {
