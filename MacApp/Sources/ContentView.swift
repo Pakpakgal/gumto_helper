@@ -8,6 +8,7 @@ struct ContentView: View {
     @EnvironmentObject private var logger: AppLogger
     @EnvironmentObject private var updater: UpdateChecker
     @ObservedObject private var analysisLogger = AnalysisLogger.shared
+    @ObservedObject private var feedback = FeedbackModel.shared
     @State private var isDropTarget = false
     @Environment(\.openWindow) private var openWindow
 
@@ -90,6 +91,9 @@ struct ContentView: View {
         }
         .sheet(isPresented: $updater.showProgressModal) {
             UpdateProgressSheet(checker: updater)
+        }
+        .sheet(isPresented: $feedback.showSheet) {
+            FeedbackSheet(model: feedback)
         }
         .onDrop(of: [.fileURL], isTargeted: $isDropTarget) { providers in
             for provider in providers {
@@ -184,6 +188,8 @@ struct ContentView: View {
             }
             .tint(logger.errorCount > 0 ? .red : nil)
             Button("분석 상태", systemImage: "list.bullet.clipboard") { openWindow(id: "analysis-status") }
+            Button("개선 요청", systemImage: "lightbulb") { feedback.showSheet = true }
+                .tint(.yellow)
             Button("영상 추가", systemImage: "plus") { model.chooseVideo() }
             if let item = model.selectedItem {
                 switch item.state {

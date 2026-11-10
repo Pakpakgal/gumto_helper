@@ -56,6 +56,11 @@ struct MaeMookApp: App {
                     openWindow(id: "error-log")
                 }
                 .keyboardShortcut("l", modifiers: [.command, .shift])
+                Divider()
+                Button("개선 요청…") {
+                    FeedbackModel.shared.showSheet = true
+                }
+                .keyboardShortcut("b", modifiers: [.command, .shift])
             }
             CommandGroup(replacing: .newItem) {
                 Button("영상 추가…") { model.chooseVideo() }
